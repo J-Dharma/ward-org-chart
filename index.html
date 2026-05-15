@@ -4396,22 +4396,25 @@ async function saveToSheets(payload){
     setSaveStatus('Saving…', 'rgba(255,255,255,0.5)');
     const json=JSON.stringify(payload);
     const compressed=LZString.compressToEncodedURIComponent(json);
-    const saveUrl=`${url}?action=save&d=${compressed}`;
 
-    if(saveUrl.length > 7500){
-      // Still too long — fall back to chunked saves not yet implemented
-      setSaveStatus('⚠ Data too large for cloud sync', '#e07060');
-      return false;
+    // Split into chunks small enough for URL params (~4000 chars each)
+    const CHUNK=4000;
+    const chunks=[];
+    for(let i=0;i<compressed.length;i+=CHUNK) chunks.push(compressed.slice(i,i+CHUNK));
+
+    const total=chunks.length;
+    const saveId=Date.now(); // unique id for this save session
+
+    // Send all chunks
+    for(let i=0;i<chunks.length;i++){
+      const resp=await fetch(`${url}?action=chunk&id=${saveId}&i=${i}&total=${total}&d=${chunks[i]}`);
+      const result=await resp.json();
+      if(!result.ok) throw new Error(result.error||`Chunk ${i} failed`);
     }
 
-    const resp=await fetch(saveUrl);
-    const result=await resp.json();
-    if(result.ok){
-      const now=new Date();
-      setSaveStatus(`☁ Saved ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`);
-      return true;
-    }
-    throw new Error(result.error||'Unknown');
+    const now=new Date();
+    setSaveStatus(`☁ Saved ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`);
+    return true;
   } catch(err){
     console.warn('Sheets save failed:',err);
     setSaveStatus('⚠ Cloud save failed — saved locally', '#e07060');
