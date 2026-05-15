@@ -4363,11 +4363,14 @@ function statePayload(){
     trayGroups: state.trayGroups||[],
     potentialCallings: state.potentialCallings||[],
     uid,
+    savedAt: Date.now(),
   };
 }
 
 function hashState(payload){
-  const s=JSON.stringify(payload);
+  // Exclude savedAt from hash — it changes every call and would break dedup
+  const {savedAt, ...rest}=payload;
+  const s=JSON.stringify(rest);
   let h=0;
   for(let i=0;i<s.length;i++){ h=(Math.imul(31,h)+s.charCodeAt(i))|0; }
   return h.toString();
@@ -4388,17 +4391,28 @@ async function saveToSheets(payload){
   const url=getSheetsUrl(); if(!url) return false;
   try{
     setSaveStatus('Saving…', 'rgba(255,255,255,0.5)');
-    // Use no-cors mode to bypass CORS preflight entirely.
-    // We can't read the response in no-cors mode, but saves don't need a response.
     await fetch(url, {
       method:'POST',
       mode:'no-cors',
       headers:{'Content-Type':'text/plain'},
       body: JSON.stringify({action:'save', data: payload}),
     });
-    const now=new Date();
-    const t=`${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
-    setSaveStatus(`☁ Saved ${t}`);
+    // no-cors means we can't read the response — verify by checking sheet status via GET
+    setTimeout(async()=>{
+      try{
+        const check=await fetch(`${url}?action=load`);
+        const result=await check.json();
+        const cloudTime=result&&result.data&&result.data.savedAt||0;
+        const localTime=payload.savedAt||0;
+        if(cloudTime>=localTime-5000){ // within 5 seconds = success
+          const now=new Date();
+          const t=`${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
+          setSaveStatus(`☁ Saved ${t}`);
+        } else {
+          setSaveStatus('⚠ Cloud save may have failed', '#e07060');
+        }
+      } catch(e){ /* verification failed, not a blocker */ }
+    }, 2000);
     return true;
   } catch(err){
     console.warn('Sheets save failed:', err);
@@ -4464,6 +4478,7 @@ function applyLoadedState(data){
   if(data.categories&&data.categories.length) state.categories=data.categories;
   if(data.trayGroups) state.trayGroups=data.trayGroups;
   if(data.potentialCallings) state.potentialCallings=data.potentialCallings;
+  state._savedAt=data.savedAt||0;  // track timestamp for cloud freshness comparison
   uid=data.uid||uid;
   lastSavedHash=hashState(statePayload());
   migrateAllOrgs();
@@ -4767,14 +4782,23 @@ applyZoom();
 if(hasSaved) setSaveStatus('Restored ✓');
 
 if(syncEnabled){
-  setSaveStatus('Loading from cloud…');
+  setSaveStatus('Checking cloud…');
   loadFromSheets().then(data=>{
     if(!data){ setSaveStatus(hasSaved?'Restored ✓':''); return; }
-    applyLoadedState(data);
-    saveLocal(data);
-    backfillStartDates();
-    buildLayout(); renderTray(); renderFdOrgList(); setTimeout(updateTrayColumns,100);
-    setSaveStatus('☁ Loaded from cloud');
+    const cloudTime = data.savedAt || 0;
+    const localTime = state._savedAt || 0;
+    if(cloudTime > localTime){
+      // Cloud is newer — apply it
+      applyLoadedState(data);
+      saveLocal(data);
+      backfillStartDates();
+      buildLayout(); renderTray(); renderFdOrgList(); renderPotentialCallings(); setTimeout(updateTrayColumns,100);
+      setSaveStatus('☁ Loaded from cloud');
+    } else {
+      // Local is same or newer — keep local, push to cloud to sync it up
+      setSaveStatus(hasSaved?'Restored ✓':'');
+      if(hasSaved && cloudTime < localTime) saveToSheets(statePayload());
+    }
   });
 }
 </script>
