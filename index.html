@@ -4411,6 +4411,8 @@ function importJSON(input){
     try{
       const data=JSON.parse(e.target.result);
       if(!data.columns||!data.people){ alert('Invalid backup file — missing columns or people.'); return; }
+      // Store data on window so the modal button can reference it without inlining JSON
+      window._pendingImport=data;
       const ov=document.createElement('div'); ov.className='modal-overlay';
       ov.innerHTML=`<div class="modal" style="max-width:360px;border-top:3px solid var(--navy);">
         <h3>Restore from backup?</h3>
@@ -4419,11 +4421,12 @@ function importJSON(input){
           <strong>${data.people.filter(p=>p.colId!=='__tray__').length} callings</strong> across <strong>${data.columns.length} orgs</strong>.
         </p>
         <div class="modal-btns">
-          <button onclick="this.closest('.modal-overlay').remove()">Cancel</button>
-          <button class="primary" onclick="applyJSONImport(${JSON.stringify(data).replace(/</g,'\\u003c')})">Restore</button>
+          <button onclick="this.closest('.modal-overlay').remove();window._pendingImport=null;">Cancel</button>
+          <button class="primary" id="confirm-restore-btn">Restore</button>
         </div>
       </div>`;
       document.body.appendChild(ov);
+      document.getElementById('confirm-restore-btn').onclick=()=>applyJSONImport(window._pendingImport);
     } catch(err){ alert('Could not read file: '+err.message); }
     input.value='';
   };
