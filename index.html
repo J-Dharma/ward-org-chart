@@ -443,12 +443,12 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
   padding: 10px 14px;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
+  border-left: 5px solid var(--navy);
   cursor: pointer;
   user-select: none;
 }
 .band.collapsed .band-head { border-bottom: none; }
 .band-head:hover { background: var(--surface-warm); }
-.band-accent { width: 4px; height: 20px; border-radius: 2px; flex-shrink: 0; }
 .band-chev { font-size: 14px; color: var(--ink-3); transition: transform 0.15s; flex-shrink: 0; width: 14px; }
 .band.collapsed .band-chev { transform: rotate(-90deg); }
 .band-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; color: var(--ink); flex-shrink: 0; }
@@ -1071,31 +1071,30 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
     <button id="zoom-label" onclick="adjustZoom(0)" title="Reset zoom" style="padding:5px 4px;background:transparent;border:none;color:inherit;cursor:pointer;font-size:10px;font-family:inherit;min-width:32px;text-align:center;border-left:1px solid rgba(255,255,255,0.15);border-right:1px solid rgba(255,255,255,0.15);">100%</button>
     <button onclick="adjustZoom(1)" title="Zoom in" style="padding:5px 8px;background:transparent;border:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;font-family:inherit;">+</button>
   </div>
-  <button class="tb-btn" id="tv-btn" onclick="toggleTVMode()" title="TV / Bishopric Mode">⌕ TV Mode</button>
-  <div class="tb-sep"></div>
 
-  <!-- … overflow menu -->
-  <div class="filter-menu" id="overflow-menu-wrap">
-    <button class="filter-menu-btn" id="overflow-menu-btn" onclick="toggleOverflowMenu()" title="More options">•••</button>
-    <div id="overflow-dropdown">
-      <div class="fd-section" style="padding:4px 0;">
-        <button class="overflow-item" onclick="toggleOverflowMenu();setTimeout(toggleSyncPanel,10)">☁ Sync to Google Sheets</button>
-        <div style="height:1px;background:var(--line);margin:4px 0;"></div>
-        <button class="overflow-item" onclick="exportJSON();toggleOverflowMenu()">↓ Backup (JSON)</button>
-        <button class="overflow-item" onclick="document.getElementById('json-import').click();toggleOverflowMenu()">↑ Restore backup (JSON)</button>
-        <input type="file" id="json-import" accept=".json" style="display:none" onchange="importJSON(this)" />
-        <div style="height:1px;background:var(--line);margin:4px 0;"></div>
-        <button class="overflow-item" onclick="exportCSV();toggleOverflowMenu()">↓ Export CSV (callings list)</button>
-        <button class="overflow-item" onclick="document.getElementById('csv-import').click();toggleOverflowMenu()">↑ Merge CSV</button>
-        <input type="file" id="csv-import" accept=".csv" style="display:none" onchange="importCSV(this)" />
-        <div style="height:1px;background:var(--line);margin:4px 0;"></div>
-        <button class="overflow-item" style="color:#b03030;" onclick="clearSaved()">⚠ Reset all data</button>
+  <!-- Right-side controls pushed to far right -->
+  <div style="margin-left:auto;display:flex;align-items:center;gap:6px;flex-shrink:0;">
+    <button class="tb-btn" id="tv-btn" onclick="toggleTVMode()" title="TV / Bishopric Mode">⌕ TV Mode</button>
+    <div class="filter-menu" id="overflow-menu-wrap">
+      <button class="filter-menu-btn" id="overflow-menu-btn" onclick="toggleOverflowMenu()" title="More options">•••</button>
+      <div id="overflow-dropdown">
+        <div class="fd-section" style="padding:4px 0;">
+          <button class="overflow-item" onclick="toggleOverflowMenu();setTimeout(toggleSyncPanel,10)">☁ Sync to Google Sheets</button>
+          <div style="height:1px;background:var(--line);margin:4px 0;"></div>
+          <button class="overflow-item" onclick="exportJSON();toggleOverflowMenu()">↓ Backup (JSON)</button>
+          <button class="overflow-item" onclick="document.getElementById('json-import').click();toggleOverflowMenu()">↑ Restore backup (JSON)</button>
+          <input type="file" id="json-import" accept=".json" style="display:none" onchange="importJSON(this)" />
+          <div style="height:1px;background:var(--line);margin:4px 0;"></div>
+          <button class="overflow-item" onclick="exportCSV();toggleOverflowMenu()">↓ Export CSV (callings list)</button>
+          <button class="overflow-item" onclick="document.getElementById('csv-import').click();toggleOverflowMenu()">↑ Merge CSV</button>
+          <input type="file" id="csv-import" accept=".csv" style="display:none" onchange="importCSV(this)" />
+          <div style="height:1px;background:var(--line);margin:4px 0;"></div>
+          <button class="overflow-item" style="color:#b03030;" onclick="clearSaved()">⚠ Reset all data</button>
+        </div>
       </div>
     </div>
+    <span id="save-status"></span>
   </div>
-
-  <div class="tb-sep"></div>
-  <span id="save-status"></span>
 </div>
 
 <div id="jumpnav"></div>
@@ -1364,11 +1363,6 @@ rawData.forEach((d,i)=>{
       if(['Elders Quorum','Young Men'].includes(col.name)) state.people[i].gender='M';
       else if(['Relief Society','Young Women'].includes(col.name)) state.people[i].gender='F';
     }
-    // Infer youth for non-adult members in youth orgs
-    if(YOUTH_ORGS.includes(col.name) && !d.v && !ADULT_ROLE_KEYWORDS.test(d.r||'')){
-      state.people[i].ageGroup='Youth';
-      if(!state.people[i].age) state.people[i].age=15;
-    }
   }
 });
 
@@ -1478,6 +1472,7 @@ function isLeader(role){
 
 // ── DRAG STATE ────────────────────────────────────────────────────────────────
 let dragId=null, dragSrcColId=null, dragSrcIdx=null;
+let potDragId=null; // id of potential calling being dragged out
 let dragSgId=null, dragSgColId=null;
 let dragUngrouped=null; // colId whose ungrouped section is being dragged
 let sgColDragId=null;    // index of sg-col being dragged within a band
@@ -1815,16 +1810,6 @@ function toggleAutoSg(on){
 
 // Run migration on all orgs. Idempotent — safe to call multiple times.
 function migrateAllOrgs(){
-  // Backfill ageGroup:'Youth' for saved people in youth orgs who are missing it
-  state.people.forEach(p=>{
-    if(p.ageGroup || p.vacant || p.colId===TRAY) return;
-    const col = state.columns.find(c=>c.id===p.colId);
-    if(col && YOUTH_ORGS.includes(col.name) && !ADULT_ROLE_KEYWORDS.test(p.role||'')){
-      p.ageGroup = 'Youth';
-      if(!p.age) p.age = 15;
-    }
-  });
-
   state.columns.forEach(col=>{
     // Normalize slot/span/order on existing subgroups (fill in missing fields)
     col.subgroups.forEach((sg,i)=>{
@@ -2020,7 +2005,7 @@ function renderJumpNav(){
 
     const dot = document.createElement('div');
     dot.className = 'jump-accent';
-    dot.style.background = accent;
+    dot.style.background = 'var(--accent)';
     chip.appendChild(dot);
 
     const name = document.createElement('span');
@@ -2071,9 +2056,9 @@ function renderTopStats(){
 
   const pips=[
     {k:'all',    n:active,      label:'serving',    cls:''},
+    {k:'tray',   n:unassigned,  label:'no calling', cls:''},
     {k:'vacant', n:vacancies,   label:'vacant',     cls:'vacant',  active:vacantFilter},
     {k:'multi',  n:multiCount,  label:'multi',      cls:'amber',   active:quickFilter==='multi'},
-    {k:'tray',   n:unassigned,  label:'no calling', cls:''},
   ];
   pips.forEach(pip=>{
     const d=document.createElement('div');
@@ -2181,7 +2166,8 @@ function buildLayout(){
 
     // Drop onto band (org-level drop)
     band.addEventListener('dragover',e=>{
-      if(col.collapsed) return; // don't accept drops on collapsed bands
+      if(col.collapsed) return;
+      if(potDragId){ e.preventDefault(); band.classList.add('drag-target'); return; }
       if(dragId){
         const dragging=state.people.find(x=>x.id===dragId);
         if(dragging&&!dragging.vacant&&!genderAllowed(dragging,col.id)){ e.dataTransfer.dropEffect='none'; return; }
@@ -2190,21 +2176,28 @@ function buildLayout(){
     });
     band.addEventListener('dragleave',e=>{ if(!band.contains(e.relatedTarget)) band.classList.remove('drag-target'); });
     band.addEventListener('drop',e=>{
-      if(col.collapsed) return; // safety: never drop into a collapsed band
-      // If dropped onto a specific sgCol, that handler already fired with stopPropagation
-      // This only catches drops onto the band header or gaps between columns
+      if(col.collapsed) return;
       if(e.target.closest('.sg-col')) return;
       e.preventDefault(); band.classList.remove('drag-target');
+      if(potDragId){
+        // Drag from potential callings → create a VACANT in this org's general subgroup
+        const pc=state.potentialCallings.find(x=>x.id===potDragId);
+        if(pc){
+          snapshot();
+          const gen=col.subgroups.find(s=>s.isGeneral)||col.subgroups[0];
+          state.people.push({id:mkid(),name:'VACANT',role:pc.role,colId:col.id,subgroupId:gen?gen.id:null,time:0,vacant:true});
+          state.potentialCallings=state.potentialCallings.filter(x=>x.id!==potDragId);
+          potDragId=null;
+          rebuildAll();
+        }
+        return;
+      }
       if(dragId) dropOntoOrg(col.id, null, null);
     });
 
     // ── Band header ──
     const head = document.createElement('div');
     head.className = 'band-head';
-
-    const acc = document.createElement('div');
-    acc.className = 'band-accent';
-    acc.style.background = accent;
 
     const chev = document.createElement('div');
     chev.className = 'band-chev';
@@ -2227,7 +2220,7 @@ function buildLayout(){
     });
     dragHandle.addEventListener('dragend', ()=>{ setTimeout(()=>{ orgDragId=null; }, 50); band.style.opacity=''; });
 
-    head.append(dragHandle, acc, chev, title);
+    head.append(dragHandle, chev, title);
 
     if(vacs>0){
       const vbadge = document.createElement('div');
@@ -2325,7 +2318,7 @@ function buildLayout(){
         sgCol.className = 'sg-col' + (usePeopleGrid ? ' people-grid' : '');
         sgCol.style.borderRight = 'none';
         // Add top separator between stacked sgs
-        if(itemIdx > 0) sgCol.style.borderTop = '2px solid var(--accent)';
+        if(itemIdx > 0) sgCol.style.borderTop = '1px solid var(--line)';
         sgCol.dataset.sgid = sg.id;
 
         // ── Full-column drag handler (person drops) ──
@@ -2392,8 +2385,9 @@ function buildLayout(){
 
         sgCol.addEventListener('dragover',e=>{
           const isPersonDrag = !!dragId;
+          const isPotDrag = !!potDragId;
           const isSgColDrag = sgColDragId!==null && sgColDragColId===col.id && sgColDragId!==sg.id;
-          if(!isPersonDrag && !isSgColDrag) return;
+          if(!isPersonDrag && !isSgColDrag && !isPotDrag) return;
           if(isPersonDrag){
             const dragging=state.people.find(x=>x.id===dragId);
             if(dragging&&!dragging.vacant&&!genderAllowed(dragging,col.id)) return;
@@ -2410,6 +2404,17 @@ function buildLayout(){
           sgCol.classList.remove('drag-target'); removeDropLine();
           if(sgColDragId!==null && sgColDragColId===col.id && sgColDragId!==sg.id){
             dropStackSgCol(col.id, sgColDragId, sg.id);
+            return;
+          }
+          if(potDragId){
+            const pc=state.potentialCallings.find(x=>x.id===potDragId);
+            if(pc){
+              snapshot();
+              state.people.push({id:mkid(),name:'VACANT',role:pc.role,colId:col.id,subgroupId:sg.id,time:0,vacant:true});
+              state.potentialCallings=state.potentialCallings.filter(x=>x.id!==potDragId);
+              potDragId=null;
+              rebuildAll();
+            }
             return;
           }
           if(dragId){
@@ -2540,7 +2545,7 @@ function buildPersonRow(p, col, q, mc){
   const row=document.createElement('div');
   const isVac=p.vacant;
   const leader=!isVac&&isLeader(p.role);
-  const isYouth = !isVac && (p.ageGroup==='Youth' || (p.age&&p.age<18));
+  const isYouth = !isVac && p.ageGroup==='Youth';
   const genderCls = isVac ? '' : (p.gender==='M' ? ' gender-M' : p.gender==='F' ? ' gender-F' : ' gender-U');
   const youthCls  = isYouth ? (p.gender==='F' ? ' youth-F' : ' youth-M') : '';
   const leaderCls = leader ? ' leader-row' : '';
@@ -3172,104 +3177,167 @@ function renderTray(){
 
   scroll.appendChild(makeTrayGroupDropZone(state.trayGroups.length));
 
-  // ── Potential Callings — pinned at bottom ──
+  const trayPane=document.getElementById('tray-pane');
+  trayPane.ondragover=e=>{ if(dragId||potDragId){ e.preventDefault(); } };
+  trayPane.ondragleave=e=>{ };
+  trayPane.ondrop=e=>{ e.preventDefault(); if(dragId) dropToTray(null); };
+
+  requestAnimationFrame(updateTrayColumns);
+  requestAnimationFrame(renderPotentialCallings);
+}
+
+// ── POTENTIAL CALLINGS PANEL ─────────────────────────────────────────────────
+function renderPotentialCallings(){
+  const inner=document.getElementById('tray-inner'); if(!inner) return;
+  const existing=document.getElementById('pot-panel'); if(existing) existing.remove();
   if(!state.potentialCallings) state.potentialCallings=[];
-  const potSec=document.createElement('div');
-  potSec.className='tray-section'+(state._potCollapsed?' collapsed':'');
 
-  const potHead=document.createElement('div');
-  potHead.className='tray-section-head';
-  potHead.style.cssText+='border-top:2px solid var(--line-2);margin-top:4px;';
+  const panel=document.createElement('div');
+  panel.id='pot-panel';
+  // Fixed height panel at the bottom — use height (not max-height) so offsetHeight works
+  if(!state._potHeight) state._potHeight=120;
+  panel.style.cssText=`flex-shrink:0;display:flex;flex-direction:column;border-top:2px solid var(--line-2);background:var(--surface);height:${state._potCollapsed?'auto':state._potHeight+'px'};overflow:hidden;`;
 
-  const potChev=document.createElement('span');
-  potChev.className='tray-section-chevron';
-  potChev.textContent='▾';
+  // ── Resize handle at top ──
+  const resizeH=document.createElement('div');
+  resizeH.id='pot-resize-handle';
+  resizeH.style.cssText='height:8px;cursor:ns-resize;background:transparent;flex-shrink:0;display:flex;align-items:center;justify-content:center;';
+  resizeH.innerHTML='<div style="width:32px;height:2px;border-radius:1px;background:var(--line-2);pointer-events:none;"></div>';
+  resizeH.addEventListener('mousedown',e=>{
+    if(state._potCollapsed) return;
+    e.preventDefault();
+    const startY=e.clientY;
+    const startH=panel.offsetHeight;
+    const innerH=inner.offsetHeight;
+    const onMove=ev=>{
+      const delta=startY-ev.clientY; // dragging up = positive delta = bigger panel
+      const newH=Math.max(60, Math.min(innerH-120, startH+delta));
+      state._potHeight=newH;
+      panel.style.height=newH+'px';
+    };
+    const onUp=()=>{
+      document.removeEventListener('mousemove',onMove);
+      document.removeEventListener('mouseup',onUp);
+      scheduleSave();
+    };
+    document.addEventListener('mousemove',onMove);
+    document.addEventListener('mouseup',onUp);
+  });
+  panel.appendChild(resizeH);
 
-  const potLabel=document.createElement('span');
-  potLabel.className='sg-head-label';
-  potLabel.textContent='Potential Callings';
+  // ── Header ──
+  const head=document.createElement('div');
+  head.className='tray-section-head';
+  head.style.cssText='flex-shrink:0;border-top:none;';
+  const chev=document.createElement('span');
+  chev.className='tray-section-chevron';
+  chev.textContent='▾';
+  if(state._potCollapsed) chev.style.transform='rotate(-90deg)';
+  const lbl=document.createElement('span'); lbl.className='sg-head-label'; lbl.textContent='Potential Callings';
+  const line=document.createElement('div'); line.className='sg-head-line';
+  const cnt=document.createElement('span');
+  cnt.style.cssText='font-size:10px;color:var(--ink-3);flex-shrink:0;font-variant-numeric:tabular-nums;';
+  cnt.textContent=state.potentialCallings.length;
+  head.append(chev, lbl, line, cnt);
+  head.addEventListener('click',()=>{
+    state._potCollapsed=!state._potCollapsed;
+    if(state._potCollapsed){
+      panel.style.height='auto';
+      body.style.display='none';
+      resizeH.style.display='none';
+      chev.style.transform='rotate(-90deg)';
+    } else {
+      panel.style.height=state._potHeight+'px';
+      body.style.display='';
+      resizeH.style.display='';
+      chev.style.transform='';
+    }
+    scheduleSave();
+  });
+  panel.appendChild(head);
 
-  const potLine=document.createElement('div');
-  potLine.className='sg-head-line';
-
-  const potCnt=document.createElement('span');
-  potCnt.style.cssText='font-size:10px;color:var(--ink-3);flex-shrink:0;font-variant-numeric:tabular-nums;';
-  potCnt.textContent=state.potentialCallings.length;
-
-  potHead.append(potChev, potLabel, potLine, potCnt);
-  potHead.addEventListener('click',()=>{ state._potCollapsed=!state._potCollapsed; potSec.classList.toggle('collapsed',!!state._potCollapsed); });
-  potSec.appendChild(potHead);
-
-  // Drop body
-  const potBody=document.createElement('div');
-  potBody.style.cssText='min-height:40px;';
-
-  potBody.addEventListener('dragover',e=>{
+  panel.addEventListener('dragover',e=>{
     if(!dragId) return;
     const dragging=state.people.find(x=>x.id===dragId);
-    if(dragging&&dragging.vacant){ e.preventDefault(); potBody.style.background='var(--surface-2)'; }
+    if(dragging&&dragging.vacant){ e.stopPropagation(); }
   });
-  potBody.addEventListener('dragleave',()=>{ potBody.style.background=''; });
-  potBody.addEventListener('drop',e=>{
-    e.preventDefault(); potBody.style.background='';
+  panel.addEventListener('drop',e=>{ e.stopPropagation(); });
+
+  // ── Body — scrollable, multi-column grid, full drop target ──
+  const body=document.createElement('div');
+  body.style.cssText='flex:1;overflow-y:auto;min-height:0;'+(state._potCollapsed?'display:none;':'');
+
+  // Drop zone for vacant callings - covers entire body
+  body.addEventListener('dragover',e=>{
+    if(!dragId) return;
+    const dragging=state.people.find(x=>x.id===dragId);
+    if(dragging&&dragging.vacant){ e.preventDefault(); e.stopPropagation(); body.style.background='var(--surface-2)'; }
+  });
+  body.addEventListener('dragleave',e=>{ if(!body.contains(e.relatedTarget)) body.style.background=''; });
+  body.addEventListener('drop',e=>{
+    e.preventDefault(); e.stopPropagation(); body.style.background='';
     if(!dragId) return;
     const dragging=state.people.find(x=>x.id===dragId);
     if(dragging&&dragging.vacant){
       snapshot();
-      if(!state.potentialCallings.some(pc=>pc.role===dragging.role&&pc.colId===dragging.colId)){
-        state.potentialCallings.push({id:mkid(), role:dragging.role, colId:dragging.colId, subgroupId:dragging.subgroupId});
-      }
-      renderTray(); scheduleSave();
+      state.potentialCallings.push({id:mkid(), role:dragging.role, colId:dragging.colId, subgroupId:dragging.subgroupId});
+      // Remove the vacant from the org chart
+      state.people=state.people.filter(x=>x.id!==dragging.id);
+      renderPotentialCallings(); buildLayout(); scheduleSave();
     }
   });
 
   if(!state.potentialCallings.length){
     const hint=document.createElement('div');
-    hint.style.cssText='font-size:11px;color:var(--ink-4);font-style:italic;padding:10px 14px;';
+    hint.style.cssText='font-size:11px;color:var(--ink-4);font-style:italic;padding:14px;text-align:center;';
     hint.textContent='Drag vacant callings here';
-    potBody.appendChild(hint);
+    body.appendChild(hint);
   } else {
+    // Same grid structure as tray chips so updateTrayColumns applies
+    const gridOuter=document.createElement('div'); gridOuter.className='tray-chip-grid';
+    const gridInner=document.createElement('div'); gridInner.className='tray-chip-grid-inner pot-chip-grid';
+    gridOuter.appendChild(gridInner);
+
     state.potentialCallings.forEach(pc=>{
       const orgCol=state.columns.find(c=>c.id===pc.colId);
       const chip=document.createElement('div');
-      chip.style.cssText='display:flex;align-items:center;gap:8px;padding:7px 14px;border-bottom:1px solid var(--line);';
+      chip.className='tray-chip gender-M'; // gender-M gives the consistent navy/blue left bar
+      chip.draggable=true;
+      chip.addEventListener('dragstart',e=>{
+        potDragId=pc.id;
+        e.dataTransfer.effectAllowed='move';
+        e.dataTransfer.setData('text/plain',pc.id);
+        setTimeout(()=>chip.classList.add('dragging'),0);
+      });
+      chip.addEventListener('dragend',()=>{ potDragId=null; chip.classList.remove('dragging'); });
 
-      if(orgCol){
-        const bar=document.createElement('div');
-        bar.style.cssText=`width:3px;align-self:stretch;border-radius:2px;background:${orgAccent(orgCol)};flex-shrink:0;min-height:16px;`;
-        chip.appendChild(bar);
-      }
-
-      const info=document.createElement('div');
-      info.style.cssText='flex:1;min-width:0;';
-      const roleEl=document.createElement('div');
-      roleEl.style.cssText='font-size:12px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-      roleEl.textContent=pc.role||'Unnamed calling';
-      const orgEl=document.createElement('div');
-      orgEl.style.cssText='font-size:10px;color:var(--ink-3);margin-top:1px;';
-      orgEl.textContent=orgCol?orgCol.name:'';
-      info.append(roleEl, orgEl);
-      chip.appendChild(info);
+      const nameEl=document.createElement('div');
+      nameEl.className='tray-chip-name';
+      nameEl.textContent=pc.role||'Unnamed calling';
+      chip.appendChild(nameEl);
 
       const del=document.createElement('div');
+      del.className='tray-chip-del';
       del.textContent='×';
-      del.style.cssText='color:var(--ink-4);cursor:pointer;font-size:13px;flex-shrink:0;padding:0 3px;line-height:1;';
-      del.onclick=()=>{ snapshot(); state.potentialCallings=state.potentialCallings.filter(x=>x.id!==pc.id); renderTray(); scheduleSave(); };
+      del.onclick=e=>{ e.stopPropagation(); snapshot(); state.potentialCallings=state.potentialCallings.filter(x=>x.id!==pc.id); renderPotentialCallings(); scheduleSave(); };
       chip.appendChild(del);
 
-      potBody.appendChild(chip);
+      gridInner.appendChild(chip);
     });
+
+    body.appendChild(gridOuter);
+    // Apply current column widths immediately
+    const pane=document.getElementById('tray-pane');
+    if(pane){
+      const w=pane.offsetWidth;
+      const cols=w>=400?3:w>=220?2:1;
+      const pct=(100/cols).toFixed(3)+'%';
+      gridInner.querySelectorAll('.tray-chip').forEach(c=>{ c.style.width=pct; c.style.boxSizing='border-box'; });
+    }
   }
 
-  potSec.appendChild(potBody);
-  scroll.appendChild(potSec);
-
-  const trayPane=document.getElementById('tray-pane');
-  trayPane.ondragover=e=>{ if(dragId){ e.preventDefault(); trayPane.style.outline='2px solid rgba(255,255,255,0.2)'; } };
-  trayPane.ondragleave=e=>{ if(!trayPane.contains(e.relatedTarget)) trayPane.style.outline=''; };
-  trayPane.ondrop=e=>{ e.preventDefault(); trayPane.style.outline=''; dropToTray(null); };
-
-  requestAnimationFrame(updateTrayColumns);
+  panel.appendChild(body);
+  inner.appendChild(panel);
 }
 
 function makeTrayDropZone(trayGroupId, beforePid){
@@ -3315,7 +3383,7 @@ function updateTrayColumns(){
 
 function makeTrayChip(p){
   const chip=document.createElement('div');
-  const isYouth = p.ageGroup==='Youth'||(p.age&&p.age<18);
+  const isYouth = p.ageGroup==='Youth';
   const genderCls = p.gender==='M' ? ' gender-M' : p.gender==='F' ? ' gender-F' : ' gender-U';
   const youthCls  = isYouth ? (p.gender==='F' ? ' youth-F' : ' youth-M') : '';
   chip.className='tray-chip'+genderCls+youthCls;
@@ -3327,12 +3395,7 @@ function makeTrayChip(p){
   const name=document.createElement('div');
   name.className='tray-chip-name';
   name.textContent=p.name+(p.role?` · ${p.role}`:'');
-  const del=document.createElement('div');
-  del.className='tray-chip-del';
-  del.textContent='×';
-  del.onclick=e=>{ e.stopPropagation(); snapshot(); state.people=state.people.filter(x=>x.id!==p.id); rebuildAll(); };
   chip.appendChild(name);
-  chip.appendChild(del);
   return chip;
 }
 
@@ -3399,7 +3462,6 @@ function openColSettings(colId){
   modal.innerHTML=`
     <h3>${col.name} — Settings</h3>
     <div class="cs-row"><label>Name</label><input type="text" id="cs-name" value="${col.name}"/></div>
-    <div class="cs-row" style="align-items:flex-start"><label style="padding-top:4px">Color</label><div class="cs-swatches" id="cs-swatches"></div></div>
     <div class="cs-row" style="align-items:flex-start"><label style="padding-top:4px">Category</label><div style="flex:1"><div class="cs-cats" id="cs-cats"></div><div style="display:flex;gap:5px;margin-top:6px"><input type="text" id="cs-newcat" placeholder="New category…" style="flex:1;font-size:11px;padding:3px 7px"/><button onclick="addCategory()" style="font-size:10px;padding:3px 8px;border:1px solid var(--border-mid);border-radius:4px;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--text-primary)">+ Add</button></div></div></div>
     <div class="cs-row" style="align-items:flex-start"><label style="padding-top:4px">Sub-groups</label><div style="flex:1"><div id="cs-subgroups" style="display:flex;flex-direction:column;gap:3px;margin-bottom:5px"></div><div style="display:flex;gap:5px"><input type="text" id="cs-newsg" placeholder="New sub-group…" style="flex:1;font-size:11px;padding:3px 7px"/><button onclick="addSubgroupFromModal('${colId}')" style="font-size:10px;padding:3px 8px;border:1px solid var(--border-mid);border-radius:4px;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--text-primary)">+ Add</button></div><div style="font-size:10px;color:var(--text-tertiary);margin-top:6px;">Drag a subgroup header onto another to stack them in the same column. Drag onto the body to reorder. Drag the right edge to widen a column.</div></div></div>
     <div class="modal-btns" style="justify-content:space-between">
@@ -3409,14 +3471,6 @@ function openColSettings(colId){
         <button class="primary" onclick="applyColSettings('${colId}')">Save</button>
       </div>
     </div>`;
-
-  COLORS.forEach(c=>{
-    const sw=document.createElement('div');
-    sw.className='cs-swatch'+(c===col.color?' selected':'');
-    sw.style.background=c; sw.dataset.color=c;
-    sw.onclick=()=>{ modal.querySelectorAll('.cs-swatch').forEach(s=>s.classList.remove('selected')); sw.classList.add('selected'); };
-    modal.querySelector('#cs-swatches').appendChild(sw);
-  });
 
   function renderCatChips(){
     const el=modal.querySelector('#cs-cats'); el.innerHTML='';
@@ -3519,7 +3573,7 @@ function applyColSettings(colId){
   snapshot();
   const col=state.columns.find(c=>c.id===colId); if(!col) return;
   const nameEl=document.getElementById('cs-name'); if(nameEl) col.name=nameEl.value.trim()||col.name;
-  const sw=document.querySelector('.cs-swatch.selected'); if(sw) col.color=sw.dataset.color;
+  const sw=document.querySelector('.cs-swatch.selected'); if(sw) { /* color removed */ }
   const cat=document.querySelector('.cs-cat.selected'); col.category=cat?cat.textContent:'';
   closeModal(); buildLayout(); renderFilterPanel(); renderQuickCats(); scheduleSave();
 }
@@ -3643,10 +3697,10 @@ function openAddDialog(defaultTab){
           <button type="button" class="add-toggle" data-val="F">Sister</button>
         </div>
         <label>Age Group</label>
-        <div class="add-toggle-group" id="add-agegroup-toggle">
-          <button type="button" class="add-toggle active" data-val="">Adult</button>
-          <button type="button" class="add-toggle" data-val="Youth">Youth</button>
-        </div>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:4px 0;">
+          <input type="checkbox" id="add-youth-cb" style="width:14px;height:14px;accent-color:var(--navy);">
+          <span style="font-size:12px;">Youth</span>
+        </label>
         <label>Calling (optional)</label>
         <input id="add-role" type="text" placeholder="Calling / role…" />
         <label>Org (optional)</label>
@@ -3665,11 +3719,7 @@ function openAddDialog(defaultTab){
           btn.onclick=()=>{ genderGroup.querySelectorAll('.add-toggle').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); };
           genderGroup.appendChild(btn);
         });
-        // Wire age group toggle
-        const ageGroup=document.getElementById('add-agegroup-toggle');
-        ageGroup.querySelectorAll('.add-toggle').forEach(btn=>{
-          btn.onclick=()=>{ ageGroup.querySelectorAll('.add-toggle').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); };
-        });
+        // Wire age group toggle removed - now a checkbox
         const ni=document.getElementById('add-name'); if(ni){ ni.focus(); ni.addEventListener('keydown',e=>{ if(e.key==='Enter') doAddMember(overlay); }); }
       },0);
     } else if(addDialogTab==='calling'){
@@ -3721,8 +3771,8 @@ function doAddMember(overlay){
   const name=(document.getElementById('add-name')||{}).value.trim(); if(!name) return;
   const genderBtn=document.querySelector('#add-gender-toggle .add-toggle.active');
   const gender=genderBtn?genderBtn.dataset.val||'':'';
-  const ageBtn=document.querySelector('#add-agegroup-toggle .add-toggle.active');
-  const ageGroup=ageBtn?ageBtn.dataset.val||'':'';
+  const isYouthCb=document.getElementById('add-youth-cb');
+  const ageGroup=isYouthCb&&isYouthCb.checked?'Youth':'';
   const role=(document.getElementById('add-role')||{}).value.trim()||'';
   const orgId=(document.getElementById('add-org')||{}).value||'';
   snapshot();
@@ -3882,24 +3932,22 @@ function openPersonCard(pid, showLinked){
   gRow.appendChild(gBtns);
   detSec.appendChild(gRow);
 
-  // Age group (Youth / Adult)
+  // Youth flag — checkbox, unchecked by default
   const ageRow=document.createElement('div'); ageRow.className='pc-row';
+  const youthLabel=document.createElement('label');
+  youthLabel.style.cssText='display:flex;align-items:center;gap:6px;cursor:pointer;';
+  const youthCb=document.createElement('input');
+  youthCb.type='checkbox';
+  youthCb.checked=p.ageGroup==='Youth';
+  youthCb.style.accentColor='var(--navy)';
+  youthCb.style.width='14px'; youthCb.style.height='14px';
+  youthCb.onchange=()=>{ p.ageGroup=youthCb.checked?'Youth':''; p.age=youthCb.checked?17:undefined; };
+  const youthLblText=document.createElement('span');
+  youthLblText.style.cssText='font-size:12px;color:var(--ink);';
+  youthLblText.textContent='Youth';
+  youthLabel.append(youthCb, youthLblText);
   ageRow.innerHTML=`<div class="pc-label">Age Group</div>`;
-  const ageBtns=document.createElement('div'); ageBtns.className='pc-gender-btns';
-  const currentAgeGroup = p.age && p.age < 18 ? 'Youth' : (p.age ? 'Adult' : (p.ageGroup||''));
-  ['Adult','Youth'].forEach(ag=>{
-    const btn=document.createElement('button');
-    btn.className='pc-gender-btn'+(currentAgeGroup===ag?' active':'');
-    btn.textContent=ag;
-    btn.onclick=()=>{
-      p.ageGroup=ag;
-      p.age=ag==='Youth'?17:18;
-      ageBtns.querySelectorAll('.pc-gender-btn').forEach(b=>b.classList.remove('active'));
-      btn.classList.add('active');
-    };
-    ageBtns.appendChild(btn);
-  });
-  ageRow.appendChild(ageBtns);
+  ageRow.appendChild(youthLabel);
   detSec.appendChild(ageRow);
 
   // Calling dates
@@ -3949,12 +3997,12 @@ function openPersonCard(pid, showLinked){
   notesRow.innerHTML=`<div class="pc-label" style="padding-top:4px">Notes</div><textarea class="pc-input" id="pc-notes" rows="2" placeholder="Any notes…" style="resize:vertical">${p.notes||''}</textarea>`;
   detSec.appendChild(notesRow);
   body.appendChild(detSec);
+  // Ensure current calling history entry exists for this card's calling
   if(p.role && p.colId!==TRAY){
     const colName=col?col.name:'';
     if(!p.history) p.history=[];
     const hasCurrent=p.history.some(h=>h.calling===p.role&&h.org===colName&&h.current);
     if(!hasCurrent){
-      // Check for a resumable past entry
       const past=p.history.find(h=>!h.current&&h.calling===p.role&&(h.org||'')===(colName||''));
       if(past){
         past.current=true; past.endDate=null;
@@ -3966,7 +4014,21 @@ function openPersonCard(pid, showLinked){
     }
   }
 
-  // Calling history section
+  // Also ensure linked callings (same person, other orgs) have their current entry recorded
+  const linkedPeople=state.people.filter(x=>x.name===p.name&&x.id!==pid&&!x.vacant&&x.colId!==TRAY);
+  linkedPeople.forEach(lp=>{
+    const lCol=state.columns.find(c=>c.id===lp.colId);
+    const lColName=lCol?lCol.name:'';
+    if(!lp.history) lp.history=[];
+    const hasCurrent=lp.history.some(h=>h.calling===lp.role&&h.org===lColName&&h.current);
+    if(!hasCurrent){
+      const past=lp.history.find(h=>!h.current&&h.calling===lp.role&&(h.org||'')===(lColName||''));
+      if(past){ past.current=true; past.endDate=null; }
+      else { lp.history.unshift({calling:lp.role, org:lColName, years:calcTenure(lp).toFixed(1), current:true, startDate:lp.startDate||null}); }
+    }
+  });
+
+  // Calling history section — show history from ALL callings this person holds
   const histSec=document.createElement('div');
   histSec.className='pc-section';
   histSec.innerHTML='<div class="pc-section-title">Calling History</div>';
@@ -3974,9 +4036,17 @@ function openPersonCard(pid, showLinked){
   const histList=document.createElement('div');
   histList.id='pc-hist-list';
 
+  // Combine history from this calling and all linked callings
+  function getCombinedHistory(){
+    const all=[...(p.history||[])];
+    linkedPeople.forEach(lp=>{ (lp.history||[]).forEach(h=>{ if(!all.some(x=>x.calling===h.calling&&x.org===h.org&&x.startDate===h.startDate)) all.push(h); }); });
+    // Sort: current first, then by startDate descending
+    return all.sort((a,b)=>{ if(a.current&&!b.current) return -1; if(!a.current&&b.current) return 1; return (b.startDate||'').localeCompare(a.startDate||''); });
+  }
+
   function renderHistory(){
     histList.innerHTML='';
-    const history=p.history||[];
+    const history=getCombinedHistory();
     if(!history.length){
       histList.innerHTML='<div style="font-size:11px;color:var(--text-tertiary);padding:4px 0">No history recorded</div>';
     } else {
@@ -4068,7 +4138,6 @@ function openPersonCard(pid, showLinked){
   body.appendChild(histSec);
 
   // ── Linked callings (other orgs this person serves in) ──
-  const linkedPeople = state.people.filter(x=>x.name===p.name&&x.id!==pid&&!x.vacant&&x.colId!==TRAY);
   if(linkedPeople.length>0){
     const linkedSec=document.createElement('div');
     linkedSec.className='pc-section';
@@ -4099,14 +4168,16 @@ function openPersonCard(pid, showLinked){
   footer.className='pc-footer';
 
   const delBtn=document.createElement('button');
-  delBtn.textContent='Remove from calling';
+  delBtn.textContent='Delete member';
   delBtn.style.cssText='color:#b03030;border-color:#e0b0b0;background:transparent;margin-right:auto;';
   delBtn.onclick=()=>{
-    const confirmDel=confirm(`Remove ${p.name} from their calling and send to No Calling tray?`);
+    const confirmDel=confirm(`Permanently delete ${p.name} from the ward chart? This cannot be undone.`);
     if(!confirmDel) return;
     const overlay=document.getElementById('person-card-overlay');
     if(overlay) overlay.remove();
-    removePerson(pid);
+    snapshot();
+    state.people=state.people.filter(x=>x.id!==p.id);
+    rebuildAll();
   };
 
   const cancelBtn=document.createElement('button');
@@ -4258,7 +4329,7 @@ function updateCounts(){
 }
 
 // ── REBUILD ───────────────────────────────────────────────────────────────────
-function rebuildAll(){ buildLayout(); renderTray(); updateTrayColumns(); scheduleSave(); }
+function rebuildAll(){ buildLayout(); renderTray(); renderPotentialCallings(); updateTrayColumns(); scheduleSave(); }
 
 // ── UNDO ─────────────────────────────────────────────────────────────────────
 const undoStack=[]; const MAX_UNDO=40;
@@ -4690,6 +4761,7 @@ setQuickFilter('all');
 buildLayout();
 renderTray();
 renderFdOrgList();
+renderPotentialCallings();
 setTimeout(updateTrayColumns, 100);
 applyZoom();
 if(hasSaved) setSaveStatus('Restored ✓');
