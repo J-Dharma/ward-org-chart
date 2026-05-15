@@ -4391,28 +4391,48 @@ async function saveToSheets(payload){
   const url=getSheetsUrl(); if(!url) return false;
   try{
     setSaveStatus('Saving…', 'rgba(255,255,255,0.5)');
-    await fetch(url, {
-      method:'POST',
-      mode:'no-cors',
-      headers:{'Content-Type':'text/plain'},
-      body: JSON.stringify({action:'save', data: payload}),
-    });
-    // no-cors means we can't read the response — verify by checking sheet status via GET
+    const body=JSON.stringify({action:'save', data: payload});
+
+    // Use a hidden iframe + form to POST without CORS restrictions
+    const iframeId='save-iframe-'+Date.now();
+    const iframe=document.createElement('iframe');
+    iframe.name=iframeId;
+    iframe.style.display='none';
+    document.body.appendChild(iframe);
+
+    const form=document.createElement('form');
+    form.method='POST';
+    form.action=url;
+    form.target=iframeId;
+    form.style.display='none';
+
+    const input=document.createElement('input');
+    input.type='hidden';
+    input.name='payload';
+    input.value=body;
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+
+    // Clean up after submission
+    setTimeout(()=>{ iframe.remove(); form.remove(); }, 5000);
+
+    // Verify after 3s that data landed
     setTimeout(async()=>{
       try{
         const check=await fetch(`${url}?action=load`);
         const result=await check.json();
         const cloudTime=result&&result.data&&result.data.savedAt||0;
         const localTime=payload.savedAt||0;
-        if(cloudTime>=localTime-5000){ // within 5 seconds = success
+        if(cloudTime>=localTime-10000){
           const now=new Date();
-          const t=`${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
-          setSaveStatus(`☁ Saved ${t}`);
+          setSaveStatus(`☁ Saved ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`);
         } else {
           setSaveStatus('⚠ Cloud save may have failed', '#e07060');
         }
-      } catch(e){ /* verification failed, not a blocker */ }
-    }, 2000);
+      } catch(e){}
+    }, 3000);
+
     return true;
   } catch(err){
     console.warn('Sheets save failed:', err);
