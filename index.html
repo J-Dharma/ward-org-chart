@@ -4393,31 +4393,17 @@ async function saveToSheets(payload){
     setSaveStatus('Saving…', 'rgba(255,255,255,0.5)');
     const body=JSON.stringify({action:'save', data: payload});
 
-    // Use a hidden iframe + form to POST without CORS restrictions
-    const iframeId='save-iframe-'+Date.now();
-    const iframe=document.createElement('iframe');
-    iframe.name=iframeId;
-    iframe.style.display='none';
-    document.body.appendChild(iframe);
+    // Try form-encoded no-cors POST — Apps Script handles this better than raw JSON
+    const params=new URLSearchParams();
+    params.append('payload', body);
 
-    const form=document.createElement('form');
-    form.method='POST';
-    form.action=url;
-    form.target=iframeId;
-    form.style.display='none';
+    await fetch(url, {
+      method:'POST',
+      mode:'no-cors',
+      body: params,
+    });
 
-    const input=document.createElement('input');
-    input.type='hidden';
-    input.name='payload';
-    input.value=body;
-    form.appendChild(input);
-    document.body.appendChild(form);
-    form.submit();
-
-    // Clean up after submission
-    setTimeout(()=>{ iframe.remove(); form.remove(); }, 5000);
-
-    // Verify after 3s that data landed
+    // Verify after 3s
     setTimeout(async()=>{
       try{
         const check=await fetch(`${url}?action=load`);
