@@ -2606,27 +2606,22 @@ function buildPersonRow(p, col, q, mc){
     row.appendChild(mb);
   }
 
-  // Tenure pill — 4-tier
+  // Tenure pill — compact format with corrected color thresholds
   if(!isVac&&(p.time>0||p.startDate)){
     const tenure=calcTenure(p);
     const pill=document.createElement('div');
+    const rounded=Math.round(tenure*10)/10;
     let cls='tnew';
-    if(tenure>=4) cls='tover';
-    else if(tenure>=2.5) cls='twarn';
-    else if(tenure>=1) cls='tok';
+    if(rounded>=5) cls='tover';
+    else if(rounded>=3) cls='twarn';
     pill.className='tenure-pill '+cls;
-    pill.textContent=tenure<1?(Math.round(tenure*12)+'mo'):(tenure.toFixed(1)+'y');
+    const months=Math.round(tenure*12);
+    pill.textContent=tenure<1?(months+'m'):rounded.toFixed(1);
     row.appendChild(pill);
   }
 
-  if(!isVac){
-    const del=document.createElement('div');
-    del.className='row-del';
-    del.textContent='×';
-    del.onclick=e=>{ e.stopPropagation(); removePerson(p.id); };
-    row.appendChild(del);
-  } else {
-    // Vacant rows also get a delete button
+  if(isVac){
+    // Vacant rows get a quick delete button
     const del=document.createElement('div');
     del.className='row-del';
     del.textContent='×';
@@ -3176,6 +3171,98 @@ function renderTray(){
   });
 
   scroll.appendChild(makeTrayGroupDropZone(state.trayGroups.length));
+
+  // ── Potential Callings — pinned at bottom ──
+  if(!state.potentialCallings) state.potentialCallings=[];
+  const potSec=document.createElement('div');
+  potSec.className='tray-section'+(state._potCollapsed?' collapsed':'');
+
+  const potHead=document.createElement('div');
+  potHead.className='tray-section-head';
+  potHead.style.cssText+='border-top:2px solid var(--line-2);margin-top:4px;';
+
+  const potChev=document.createElement('span');
+  potChev.className='tray-section-chevron';
+  potChev.textContent='▾';
+
+  const potLabel=document.createElement('span');
+  potLabel.className='sg-head-label';
+  potLabel.textContent='Potential Callings';
+
+  const potLine=document.createElement('div');
+  potLine.className='sg-head-line';
+
+  const potCnt=document.createElement('span');
+  potCnt.style.cssText='font-size:10px;color:var(--ink-3);flex-shrink:0;font-variant-numeric:tabular-nums;';
+  potCnt.textContent=state.potentialCallings.length;
+
+  potHead.append(potChev, potLabel, potLine, potCnt);
+  potHead.addEventListener('click',()=>{ state._potCollapsed=!state._potCollapsed; potSec.classList.toggle('collapsed',!!state._potCollapsed); });
+  potSec.appendChild(potHead);
+
+  // Drop body
+  const potBody=document.createElement('div');
+  potBody.style.cssText='min-height:40px;';
+
+  potBody.addEventListener('dragover',e=>{
+    if(!dragId) return;
+    const dragging=state.people.find(x=>x.id===dragId);
+    if(dragging&&dragging.vacant){ e.preventDefault(); potBody.style.background='var(--surface-2)'; }
+  });
+  potBody.addEventListener('dragleave',()=>{ potBody.style.background=''; });
+  potBody.addEventListener('drop',e=>{
+    e.preventDefault(); potBody.style.background='';
+    if(!dragId) return;
+    const dragging=state.people.find(x=>x.id===dragId);
+    if(dragging&&dragging.vacant){
+      snapshot();
+      if(!state.potentialCallings.some(pc=>pc.role===dragging.role&&pc.colId===dragging.colId)){
+        state.potentialCallings.push({id:mkid(), role:dragging.role, colId:dragging.colId, subgroupId:dragging.subgroupId});
+      }
+      renderTray(); scheduleSave();
+    }
+  });
+
+  if(!state.potentialCallings.length){
+    const hint=document.createElement('div');
+    hint.style.cssText='font-size:11px;color:var(--ink-4);font-style:italic;padding:10px 14px;';
+    hint.textContent='Drag vacant callings here';
+    potBody.appendChild(hint);
+  } else {
+    state.potentialCallings.forEach(pc=>{
+      const orgCol=state.columns.find(c=>c.id===pc.colId);
+      const chip=document.createElement('div');
+      chip.style.cssText='display:flex;align-items:center;gap:8px;padding:7px 14px;border-bottom:1px solid var(--line);';
+
+      if(orgCol){
+        const bar=document.createElement('div');
+        bar.style.cssText=`width:3px;align-self:stretch;border-radius:2px;background:${orgAccent(orgCol)};flex-shrink:0;min-height:16px;`;
+        chip.appendChild(bar);
+      }
+
+      const info=document.createElement('div');
+      info.style.cssText='flex:1;min-width:0;';
+      const roleEl=document.createElement('div');
+      roleEl.style.cssText='font-size:12px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+      roleEl.textContent=pc.role||'Unnamed calling';
+      const orgEl=document.createElement('div');
+      orgEl.style.cssText='font-size:10px;color:var(--ink-3);margin-top:1px;';
+      orgEl.textContent=orgCol?orgCol.name:'';
+      info.append(roleEl, orgEl);
+      chip.appendChild(info);
+
+      const del=document.createElement('div');
+      del.textContent='×';
+      del.style.cssText='color:var(--ink-4);cursor:pointer;font-size:13px;flex-shrink:0;padding:0 3px;line-height:1;';
+      del.onclick=()=>{ snapshot(); state.potentialCallings=state.potentialCallings.filter(x=>x.id!==pc.id); renderTray(); scheduleSave(); };
+      chip.appendChild(del);
+
+      potBody.appendChild(chip);
+    });
+  }
+
+  potSec.appendChild(potBody);
+  scroll.appendChild(potSec);
 
   const trayPane=document.getElementById('tray-pane');
   trayPane.ondragover=e=>{ if(dragId){ e.preventDefault(); trayPane.style.outline='2px solid rgba(255,255,255,0.2)'; } };
@@ -4010,7 +4097,29 @@ function openPersonCard(pid, showLinked){
   // ── Footer ──
   const footer=document.createElement('div');
   footer.className='pc-footer';
-  footer.innerHTML=`<button onclick="saveAndCloseCard('${pid}')">Cancel</button><button class="primary" onclick="saveAndCloseCard('${pid}',true)">Save</button>`;
+
+  const delBtn=document.createElement('button');
+  delBtn.textContent='Remove from calling';
+  delBtn.style.cssText='color:#b03030;border-color:#e0b0b0;background:transparent;margin-right:auto;';
+  delBtn.onclick=()=>{
+    const confirmDel=confirm(`Remove ${p.name} from their calling and send to No Calling tray?`);
+    if(!confirmDel) return;
+    const overlay=document.getElementById('person-card-overlay');
+    if(overlay) overlay.remove();
+    removePerson(pid);
+  };
+
+  const cancelBtn=document.createElement('button');
+  cancelBtn.textContent='Cancel';
+  cancelBtn.onclick=()=>saveAndCloseCard(pid);
+
+  const saveBtn=document.createElement('button');
+  saveBtn.className='primary';
+  saveBtn.textContent='Save';
+  saveBtn.onclick=()=>saveAndCloseCard(pid,true);
+
+  if(p.colId!==TRAY) footer.appendChild(delBtn);
+  footer.append(cancelBtn, saveBtn);
   card.appendChild(footer);
 
   overlay.appendChild(card);
@@ -4181,6 +4290,7 @@ function statePayload(){
     people:  state.people.map(p=>({...p})),
     categories: state.categories,
     trayGroups: state.trayGroups||[],
+    potentialCallings: state.potentialCallings||[],
     uid,
   };
 }
@@ -4282,6 +4392,7 @@ function applyLoadedState(data){
   state.people=data.people;
   if(data.categories&&data.categories.length) state.categories=data.categories;
   if(data.trayGroups) state.trayGroups=data.trayGroups;
+  if(data.potentialCallings) state.potentialCallings=data.potentialCallings;
   uid=data.uid||uid;
   lastSavedHash=hashState(statePayload());
   migrateAllOrgs();
