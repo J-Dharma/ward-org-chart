@@ -4397,23 +4397,37 @@ async function saveToSheets(payload){
     const json=JSON.stringify(payload);
     const compressed=LZString.compressToEncodedURIComponent(json);
 
-    // Split into chunks small enough for URL params (~4000 chars each)
     const CHUNK=4000;
     const chunks=[];
     for(let i=0;i<compressed.length;i+=CHUNK) chunks.push(compressed.slice(i,i+CHUNK));
-
     const total=chunks.length;
-    const saveId=Date.now(); // unique id for this save session
+    const saveId=Date.now();
 
-    // Send all chunks
+    console.log(`Saving ${total} chunks, total compressed length: ${compressed.length}`);
+
     for(let i=0;i<chunks.length;i++){
       const resp=await fetch(`${url}?action=chunk&id=${saveId}&i=${i}&total=${total}&d=${chunks[i]}`);
       const result=await resp.json();
+      console.log(`Chunk ${i}/${total-1}:`, result);
       if(!result.ok) throw new Error(result.error||`Chunk ${i} failed`);
     }
 
-    const now=new Date();
-    setSaveStatus(`☁ Saved ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`);
+    // Verify what actually landed in the sheet
+    setTimeout(async()=>{
+      try{
+        const check=await fetch(`${url}?action=status`);
+        const status=await check.json();
+        console.log('Sheet status after save:', status);
+        if(status.a1len>100){
+          const now=new Date();
+          setSaveStatus(`☁ Saved ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`);
+        } else {
+          console.warn('A1 is empty or tiny after save - assembly may have failed');
+          setSaveStatus('⚠ Cloud save may have failed', '#e07060');
+        }
+      } catch(e){ console.warn('Status check failed:', e); }
+    }, 2000);
+
     return true;
   } catch(err){
     console.warn('Sheets save failed:',err);
