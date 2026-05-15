@@ -2328,16 +2328,37 @@ function buildLayout(){
 
         // ── Full-column drag handler (person drops) ──
         let dropIndicator = null;
-        function getInsertTarget(clientY){
+        function getInsertTarget(clientX, clientY){
           const rows = [...sgCol.querySelectorAll('.person-row')];
           if(!rows.length) return null;
+          // For multi-column grids, find closest row by 2D distance to row midpoint
+          if(sgCol.classList.contains('people-grid')){
+            let bestPid=null, bestDist=Infinity;
+            for(const row of rows){
+              const rect=row.getBoundingClientRect();
+              const midX=rect.left+rect.width/2, midY=rect.top+rect.height/2;
+              const dist=Math.hypot(clientX-midX, clientY-midY);
+              if(dist<bestDist){ bestDist=dist; bestPid=row.dataset.pid; }
+            }
+            // If cursor is below the best row's midpoint, insert after it
+            const bestRow=rows.find(r=>r.dataset.pid===bestPid);
+            if(bestRow){
+              const rect=bestRow.getBoundingClientRect();
+              if(clientY>rect.top+rect.height/2){
+                const idx=rows.indexOf(bestRow);
+                return idx<rows.length-1?rows[idx+1].dataset.pid:null;
+              }
+            }
+            return bestPid;
+          }
+          // Single column: original Y-only logic
           for(const row of rows){
             const rect = row.getBoundingClientRect();
             if(clientY < rect.top + rect.height/2) return row.dataset.pid;
           }
           return null;
         }
-        function showDropLine(clientY){
+        function showDropLine(clientX, clientY){
           if(!dropIndicator){
             dropIndicator = document.createElement('div');
             dropIndicator.style.cssText = 'position:absolute;left:8px;right:8px;height:2px;border-radius:1px;background:var(--accent);pointer-events:none;z-index:10;transition:top 0.05s;';
@@ -2347,7 +2368,13 @@ function buildLayout(){
           const colRect = sgCol.getBoundingClientRect();
           let lineY;
           if(!rows.length){ lineY = 48; }
-          else {
+          else if(sgCol.classList.contains('people-grid')){
+            // For grid: find the target insert position and draw line at that row's top
+            const beforePid=getInsertTarget(clientX, clientY);
+            const beforeRow=beforePid?rows.find(r=>r.dataset.pid===beforePid):null;
+            if(beforeRow){ lineY=beforeRow.getBoundingClientRect().top-colRect.top-1; }
+            else { const last=rows[rows.length-1].getBoundingClientRect(); lineY=last.bottom-colRect.top+1; }
+          } else {
             let placed = false;
             for(const row of rows){
               const rect = row.getBoundingClientRect();
@@ -2371,7 +2398,7 @@ function buildLayout(){
           }
           e.preventDefault(); e.stopPropagation();
           sgCol.classList.add('drag-target');
-          if(isPersonDrag) showDropLine(e.clientY);
+          if(isPersonDrag) showDropLine(e.clientX, e.clientY);
         });
         sgCol.addEventListener('dragleave',e=>{
           if(!sgCol.contains(e.relatedTarget)){ sgCol.classList.remove('drag-target'); removeDropLine(); }
@@ -2384,7 +2411,7 @@ function buildLayout(){
             return;
           }
           if(dragId){
-            const beforePid = getInsertTarget(e.clientY);
+            const beforePid = getInsertTarget(e.clientX, e.clientY);
             dropReorder(col.id, sg.id, beforePid);
           }
         });
@@ -4140,7 +4167,7 @@ document.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.key==='z')
 
 // ── GOOGLE SHEETS SYNC ───────────────────────────────────────────────────────
 // Paste your deployed Apps Script Web App URL here:
-const SHEETS_URL = '';  // e.g. 'https://script.google.com/macros/s/ABC.../exec'
+const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbyb2FnJTcQaqMx7EpbCwp8c7eKqPs6K0HG1skoLiCFN4Pwpmj-ukch26nv5kGptJz40MA/exec';
 const SAVE_KEY = 'ward-org-chart-v1';
 let saveTimer = null;
 let syncEnabled = !!SHEETS_URL;
