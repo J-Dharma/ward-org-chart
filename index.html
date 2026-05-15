@@ -4205,20 +4205,18 @@ async function saveToSheets(payload){
   const url=getSheetsUrl(); if(!url) return false;
   try{
     setSaveStatus('Saving…', 'rgba(255,255,255,0.5)');
-    // Use GET with encoded data to avoid CORS preflight (POST is blocked by Apps Script CORS)
-    const data=encodeURIComponent(JSON.stringify(payload));
-    const resp=await fetch(`${url}?action=save&data=${data}`, {
-      method:'GET',
-      redirect:'follow',
+    // Use no-cors mode to bypass CORS preflight entirely.
+    // We can't read the response in no-cors mode, but saves don't need a response.
+    await fetch(url, {
+      method:'POST',
+      mode:'no-cors',
+      headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({action:'save', data: payload}),
     });
-    const result=await resp.json();
-    if(result.ok){
-      const now=new Date();
-      const t=`${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
-      setSaveStatus(`☁ Saved ${t}`);
-      return true;
-    }
-    throw new Error(result.error||'Unknown error');
+    const now=new Date();
+    const t=`${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
+    setSaveStatus(`☁ Saved ${t}`);
+    return true;
   } catch(err){
     console.warn('Sheets save failed:', err);
     setSaveStatus('⚠ Cloud save failed — saved locally', '#e07060');
