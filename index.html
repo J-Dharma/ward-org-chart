@@ -4205,11 +4205,11 @@ async function saveToSheets(payload){
   const url=getSheetsUrl(); if(!url) return false;
   try{
     setSaveStatus('Saving…', 'rgba(255,255,255,0.5)');
-    const resp=await fetch(url, {
-      method:'POST',
+    // Use GET with encoded data to avoid CORS preflight (POST is blocked by Apps Script CORS)
+    const data=encodeURIComponent(JSON.stringify(payload));
+    const resp=await fetch(`${url}?action=save&data=${data}`, {
+      method:'GET',
       redirect:'follow',
-      headers:{'Content-Type':'text/plain'},
-      body: JSON.stringify({action:'save', data: payload}),
     });
     const result=await resp.json();
     if(result.ok){
