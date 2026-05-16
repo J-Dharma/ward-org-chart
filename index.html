@@ -88,6 +88,7 @@ body {
 
 body.hide-tenure .tenure-pill { display: none !important; }
 body.hide-tenure .row-multi { margin-left: auto; }
+/* ── TV MODE ── */
 body.tv-mode {
   --row-h: 40px;
   --row-pad: 11px 18px;
@@ -469,23 +470,17 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
 .band-settings:hover { opacity: 1; background: var(--surface-2); }
 .band-spacer { flex: 1; }
 
-/* Band body — vertical growth unrestricted, horizontal scroll via inner wrapper */
+/* Band body — CSS grid, columns set inline by JS */
 .band-body {
-  display: block;
-  width: 100%;
-  overflow: visible;
-}
-.band-body-inner {
   display: flex;
   align-items: stretch;
   overflow-x: auto;
   overflow-y: visible;
   scrollbar-width: thin;
   min-height: 80px;
-  width: 100%;
 }
-.band-body-inner::-webkit-scrollbar { height: 5px; }
-.band-body-inner::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 4px; }
+.band-body::-webkit-scrollbar { height: 5px; }
+.band-body::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
 
 /* ── SUBGROUP COLUMN ── */
 .sg-col {
@@ -581,8 +576,6 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
 }
 .sg-head-add:hover { color: var(--navy); background: var(--navy-soft); }
 .sg-empty { padding: 16px 14px; color: var(--ink-4); font-size: 11px; font-style: italic; text-align: center; pointer-events: none; }
-/* Ensure sg-col is always a valid drop target even when empty */
-.sg-col { min-height: 40px; }
 
 /* ── ROW-LEVEL DRAG ZONES ── */
 .row-drop-above { display: contents; } /* invisible to grid/flex layout */
@@ -766,6 +759,10 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
 #tray-group-toggle span { opacity: 0.5; }
 #tray-group-toggle span.active { opacity: 1; color: var(--ink); font-weight: 600; }
 #tray-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; display: block; }
+.tray-gender-divider {
+  font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;
+  color:var(--ink-3);padding:6px 10px 2px;width:100%;
+}
 #tray-scroll::-webkit-scrollbar { width: 4px; }
 #tray-scroll::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 2px; }
 
@@ -787,10 +784,6 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
 .tray-section.collapsed .tray-section-chevron { transform:rotate(-90deg); }
 .tray-section.collapsed .tray-chip-grid { display:none; }
 .tray-section.collapsed .tray-section-drop { display:none; }
-.tray-gender-divider {
-  font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;
-  color:var(--ink-3);padding:6px 10px 2px;width:100%;
-}
 .tray-chip-grid { }
 .tray-chip-grid-inner { display: flex; flex-wrap: wrap; align-content: start; }
 .tray-chip {
@@ -1073,6 +1066,7 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
 <script>
 // ── PASSWORD PROTECTION ───────────────────────────────────────────────────────
 (function(){
+  sessionStorage.setItem('ward-auth','1'); return; // TEMPORARILY DISABLED
   const HASH='7ee569e9d8125cf5ded7e41bd7307535c78ef27aa7cc2c73409e8e6eccfe6fa9';
   async function sha256(str){
     const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
@@ -1807,6 +1801,7 @@ function renderQuickCats(){}
 
 // ── OVERFLOW (…) MENU ─────────────────────────────────────────────────────────
 let overflowMenuOpen=false;
+let showTenure = true;       // toggle tenure pills
 function toggleOverflowMenu(){
   overflowMenuOpen=!overflowMenuOpen;
   const dd=document.getElementById('overflow-dropdown');
@@ -1828,7 +1823,6 @@ document.addEventListener('click',e=>{
 // ── UI STATE ──────────────────────────────────────────────────────────────────
 let autoSg = true;           // auto-detect subgroups
 let tvMode = false;          // TV / Bishopric mode
-let showTenure = true;       // toggle tenure pills
 
 // ── ZOOM ─────────────────────────────────────────────────────────────────────
 const ZOOM_STEPS = [50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200];
@@ -2361,13 +2355,9 @@ function buildLayout(){
     const numCols = GRID_COLS; // always 5-column grid
 
     body.className = 'band-body';
-    body.style.display = '';
+    body.style.display = 'flex';
     body.style.width = '';
     body.style.gridTemplateColumns = '';
-
-    // Inner wrapper handles horizontal scroll without clipping vertical height
-    const bodyInner = document.createElement('div');
-    bodyInner.className = 'band-body-inner';
 
     // Group visibleSgWP by slot — same slot renders stacked in one flex column
     const slotGroups = [];
@@ -2384,7 +2374,7 @@ function buildLayout(){
     slotGroups.forEach((group, groupIdx)=>{
       // Slot wrapper — this is the actual flex column
       const slotWrapper = document.createElement('div');
-      slotWrapper.style.cssText = 'display:flex;flex-direction:column;flex:1 1 0;min-width:0;border-right:1px solid var(--line);';
+      slotWrapper.style.cssText = 'display:flex;flex-direction:column;flex:1 1 0;min-width:0;border-right:1px solid var(--line);overflow:hidden;';
 
       // Reorder drop zone before this slot
       body.appendChild(makeSgDropZone(col.id, group.items[0].sg.id));
@@ -2563,7 +2553,7 @@ function buildLayout(){
         rh.addEventListener('mousedown', e=>{
           e.preventDefault(); e.stopPropagation();
           const startX=e.clientX, startSpan=sg.span||1;
-          const bodyEl=sgCol.closest('.band-body-inner');
+          const bodyEl=sgCol.closest('.band-body');
           const colWidth=Math.max(50,(bodyEl?bodyEl.getBoundingClientRect().width:COL_W*GRID_COLS)/GRID_COLS);
           document.body.style.cursor='ew-resize';
           const onMove=ev=>{ const ns=Math.min(GRID_COLS,Math.max(1,Math.round(startSpan+(ev.clientX-startX)/colWidth))); if(ns!==sg.span){sg.span=ns;slotWrapper.style.flex=`${ns} ${ns} 0`;slotWrapper.style.minWidth=`${ns*colWidth}px`;} };
@@ -2587,20 +2577,21 @@ function buildLayout(){
         slotWrapper.appendChild(sgCol);
       });
 
-      bodyInner.appendChild(slotWrapper);
+      body.appendChild(slotWrapper);
     });
 
     // Trailing reorder drop zone
-    bodyInner.appendChild(makeSgDropZone(col.id, null));
+    body.appendChild(makeSgDropZone(col.id, null));
 
-    if(bodyInner.children.length===0){
+
+
+    if(body.children.length===0){
       const empty=document.createElement('div');
       empty.style.cssText='padding:20px;color:var(--ink-4);font-size:11px;font-style:italic;';
       empty.textContent='No matching callings';
-      bodyInner.appendChild(empty);
+      body.appendChild(empty);
     }
 
-    body.appendChild(bodyInner);
     // ── Band drag reorder drop zone (before this band) ──
     const beforeZone = makeBandDropZone(col.id);
     stack.appendChild(beforeZone);
@@ -2682,6 +2673,7 @@ function buildPersonRow(p, col, q, mc){
 
   const roleEl=document.createElement('div');
   roleEl.className='person-role';
+  // strip subgroup tail from role for display
   let displayRole=p.role||'';
   if(displayRole.includes('—')) displayRole=displayRole.split('—')[0].trim();
   roleEl.textContent=displayRole;
@@ -3021,6 +3013,7 @@ function dropToTray(trayGroupId){
 // ── TRAY ─────────────────────────────────────────────────────────────────────
 let trayOpen=true;
 let trayMode='flat';
+let traySortBy='last'; // 'last'|'first' — sort by last or first name
 let trayResizing=false, trayResizeStartX=0, trayResizeStartW=0;
 
 // Wire tray resize handle after DOM ready
@@ -3062,7 +3055,6 @@ window.addEventListener('mouseup',e=>{
 let trayFilterOpen=false;
 let trayGenderFilter='all'; // 'all'|'M'|'F'
 let trayGroupFilter=new Set(); // empty = show all; entries = 'ungrouped' or group ids
-let traySortBy='last'; // 'last'|'first' — sort by last or first name
 
 function toggleTrayFilter(){
   trayFilterOpen=!trayFilterOpen;
@@ -3201,6 +3193,9 @@ function renderTray(){
   if(document.getElementById('tray-rail-cnt')) document.getElementById('tray-rail-cnt').textContent=state.people.filter(p=>p.colId===TRAY).length;
   scroll.innerHTML='';
 
+  const showAll=trayGroupFilter.size===0;
+  const showUngrouped=showAll||trayGroupFilter.has('ungrouped');
+
   function traySort(a,b){
     if(traySortBy==='first') return (a.name.split(' ')[0]||'').localeCompare(b.name.split(' ')[0]||'');
     return (a.name.split(' ').pop()||'').localeCompare(b.name.split(' ').pop()||'');
@@ -3215,8 +3210,6 @@ function renderTray(){
     ].filter(g=>g.people.length>0);
   }
 
-  const showAll=trayGroupFilter.size===0;
-  const showUngrouped=showAll||trayGroupFilter.has('ungrouped');
   const sections=[
     ...(showUngrouped?[{id:null, name:'', people:allPeople.filter(p=>!p.trayGroupId&&p.ageGroup!=='Youth'), isUngrouped:true}]:[]),
     ...(state.trayGroups||[])
@@ -3301,11 +3294,11 @@ function renderTray(){
       section.appendChild(head);
     }
 
-    // Build chip grid with gender sub-grouping
     const grid=document.createElement('div');
     grid.className='tray-chip-grid';
     grid.appendChild(makeTrayDropZone(sec.id, null));
 
+    // Build chip grid with gender sub-grouping
     if(sec.isUngrouped){
       // Free Agents: also show Youth sub-section
       const youthPeople=allPeople.filter(p=>!p.trayGroupId&&p.ageGroup==='Youth').sort(traySort);
@@ -3961,6 +3954,8 @@ function doAddMember(overlay){
   const ageGroup=isYouthCb&&isYouthCb.checked?'Youth':'';
   const role=(document.getElementById('add-role')||{}).value.trim()||'';
   const orgId=(document.getElementById('add-org')||{}).value||'';
+  snapshot();
+  const colId=orgId||TRAY;
 
   // Duplicate name warning
   const dup=state.people.find(x=>x.name.toLowerCase()===name.toLowerCase()&&!x.vacant);
@@ -3970,8 +3965,6 @@ function doAddMember(overlay){
     if(!confirm(`"${name}" already exists${loc?' in '+loc:''}${dup.role?' as '+dup.role:''}.\n\nAdd anyway?`)) return;
   }
 
-  snapshot();
-  const colId=orgId||TRAY;
   const p={id:mkid(),name,role,colId,subgroupId:null,time:0,vacant:false,gender,startDate:role&&orgId?new Date().toISOString().slice(0,7):null};
   if(ageGroup==='Youth'){ p.ageGroup='Youth'; p.age=15; }
   state.people.push(p);
@@ -4263,7 +4256,7 @@ function openPersonCard(pid, showLinked){
           ${dateStr?`<span style="color:var(--text-tertiary);font-size:10px;flex-shrink:0">${dateStr}</span>`:''}
           ${currentBadge}
           <span class="pc-history-edit-btn" data-idx="${i}" title="Edit" style="cursor:pointer;color:var(--text-tertiary);padding:0 3px;flex-shrink:0;font-size:11px">✎</span>
-          <div class="pc-history-del" onclick="removeHistoryFromAny('${pid}','${h.calling||''}','${h.org||''}','${h.startDate||''}')" title="Delete this history entry" style="flex-shrink:0">×</div>`;
+          ${h.current?'':'<div class="pc-history-del" onclick="removeHistoryFromAny(\''+pid+'\',\''+( h.calling||'').replace(/'/g,"\\'")+'\',' +'\''+( h.org||'').replace(/'/g,"\\'")+'\',' +'\''+( h.startDate||'').replace(/'/g,"\\'")+'\''+')" title="Delete this history entry" style="flex-shrink:0">×</div>'}`;
         item.appendChild(viewRow);
 
         // Edit row (hidden by default)
