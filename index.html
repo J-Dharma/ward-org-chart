@@ -4657,8 +4657,18 @@ async function saveToSheets(payload){
     }
     console.log('Save response:', JSON.stringify(r));
     if(!r.ok) throw new Error(r.error || 'Apps Script rejected the save');
-    if(r.verified) console.log(`Cloud save OK & VERIFIED — ${r.length} chars across ${r.cells} cell(s)`);
-    else console.warn(`Cloud save reported OK but no write-verify flag — Apps Script may be an older version`);
+    if(r.verified) {
+      console.log(`Cloud save OK & VERIFIED — ${r.length} chars across ${r.chunks} chunk(s)`);
+      // Self-test: decode the hex we just built, right here, right now.
+      // This tells us if LZString.decompress works on THIS browser with THIS payload.
+      try{
+        const _selfDecomp=LZString.decompress(hexToStr(hex));
+        if(_selfDecomp && JSON.parse(_selfDecomp).people)
+          console.log('Self-test ✓ — hex decodes correctly in this browser');
+        else
+          console.error('Self-test FAIL — decompress returned null or missing people. hex length='+hex.length+', first decomp chars=',_selfDecomp?_selfDecomp.slice(0,80):'null');
+      }catch(e){ console.error('Self-test threw:',e.message); }
+    } else console.warn('Cloud save reported OK but no write-verify flag — Apps Script may be older version');
 
     const now=new Date();
     setSaveStatus(`☁ Saved ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`);
