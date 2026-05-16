@@ -789,18 +789,11 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
 .tray-section.collapsed .tray-section-drop { display:none; }
 .tray-chip-grid { }
 .tray-chip-grid-inner {
-  column-fill: balance;
-  /* column-count set dynamically by updateTrayColumns */
-}
-/* Potential callings always single-column block, no column-count */
-.pot-chip-grid {
-  display: block !important;
-  column-count: unset !important;
-}
-.pot-chip-grid .tray-chip {
-  display: block !important;
-  width: 100% !important;
-  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  /* height set dynamically by updateTrayColumns so columns flow top-to-bottom */
 }
 .tray-chip {
   display:flex; align-items:center; gap:4px; padding:6px 12px 6px 10px;
@@ -831,9 +824,11 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
 .tray-chip:hover .tray-chip-del { opacity: 1; }
 .tray-chip-del:hover { color: #c0392b; }
 #tray-drop-end {
-  min-height: 40px; border: 1px dashed transparent; margin: 8px; border-radius: 6px;
+  min-height: 10px; border: 1px dashed transparent; margin: 0 8px;
+  border-radius: 6px; flex-shrink: 0;
+  transition: min-height 0.1s;
 }
-#tray-drop-end.drag-over { border-color: var(--accent); background: var(--accent-soft); }
+#tray-drop-end.drag-over { border-color: var(--accent); background: var(--accent-soft); min-height: 44px; }
 
 /* ── MODAL ── */
 .modal-overlay {
@@ -3420,16 +3415,23 @@ function renderPotentialCallings(){
   const inner=document.getElementById('tray-inner'); if(!inner) return;
   const existing=document.getElementById('pot-panel'); if(existing) existing.remove();
   if(!state.potentialCallings) state.potentialCallings=[];
+  if(!state._potHeight) state._potHeight=160;
 
   const panel=document.createElement('div');
   panel.id='pot-panel';
-  panel.style.cssText='flex-shrink:0;border-top:2px solid var(--line-2);background:var(--surface);';
+  panel.style.cssText='flex-shrink:0;display:flex;flex-direction:column;border-top:2px solid var(--line-2);background:var(--surface);';
+
+  // ── Resize handle (drag up/down to size the body) ──
+  const resizeH=document.createElement('div');
+  resizeH.style.cssText='height:9px;cursor:ns-resize;background:var(--surface-2);flex-shrink:0;display:flex;align-items:center;justify-content:center;';
+  resizeH.innerHTML='<div style="width:34px;height:3px;border-radius:2px;background:var(--line-2);pointer-events:none;"></div>';
+  if(state._potCollapsed) resizeH.style.display='none';
 
   // ── Header ──
   const head=document.createElement('div');
   head.className='tray-section-head';
   head.style.cssText='flex-shrink:0;border-top:none;cursor:pointer;';
-  const chev=document.createElement('span'); chev.className='tray-section-chevron'; chev.textContent='▾';
+  const chev=document.createElement('span'); chev.className='tray-section-chevron'; chev.textContent='\u25be';
   if(state._potCollapsed) chev.style.transform='rotate(-90deg)';
   const lbl=document.createElement('span'); lbl.className='sg-head-label'; lbl.textContent='Potential Callings';
   const line=document.createElement('div'); line.className='sg-head-line';
@@ -3440,28 +3442,43 @@ function renderPotentialCallings(){
 
   // ── Body ──
   const body=document.createElement('div');
-  body.style.cssText='overflow-y:auto;max-height:180px;'+(state._potCollapsed?'display:none;':'');
+  body.style.cssText='overflow-y:auto;overflow-x:hidden;height:'+state._potHeight+'px;'+(state._potCollapsed?'display:none;':'');
+
+  // Resize handle drag — adjusts body height
+  resizeH.addEventListener('mousedown',e=>{
+    e.preventDefault();
+    const startY=e.clientY;
+    const startH=state._potHeight;
+    const onMove=ev=>{
+      const newH=Math.max(60, Math.min(420, startH+(startY-ev.clientY)));
+      state._potHeight=newH;
+      body.style.height=newH+'px';
+    };
+    const onUp=()=>{
+      document.removeEventListener('mousemove',onMove);
+      document.removeEventListener('mouseup',onUp);
+      scheduleSave();
+    };
+    document.addEventListener('mousemove',onMove);
+    document.addEventListener('mouseup',onUp);
+  });
 
   head.addEventListener('click',()=>{
     state._potCollapsed=!state._potCollapsed;
     if(state._potCollapsed){
       body.style.display='none';
+      resizeH.style.display='none';
       chev.style.transform='rotate(-90deg)';
     } else {
       body.style.display='';
+      body.style.height=state._potHeight+'px';
+      resizeH.style.display='';
       chev.style.transform='';
     }
     scheduleSave();
   });
 
-  // Drop zone — whole panel accepts vacant callings
-  panel.addEventListener('dragover',e=>{
-    if(!dragId) return;
-    const dragging=state.people.find(x=>x.id===dragId);
-    if(dragging&&dragging.vacant){ e.stopPropagation(); }
-  });
-  panel.addEventListener('drop',e=>{ e.stopPropagation(); });
-
+  // Drop vacant callings into the panel body
   body.addEventListener('dragover',e=>{
     if(!dragId) return;
     const dragging=state.people.find(x=>x.id===dragId);
@@ -3476,7 +3493,7 @@ function renderPotentialCallings(){
       snapshot();
       state.potentialCallings.push({id:mkid(), role:dragging.role, colId:dragging.colId, subgroupId:dragging.subgroupId});
       state.people=state.people.filter(x=>x.id!==dragging.id);
-      renderPotentialCallings(); buildLayout(); scheduleSave();
+      renderPotentialCallings(); buildLayout(); updateTrayColumns(); scheduleSave();
     }
   });
 
@@ -3486,12 +3503,12 @@ function renderPotentialCallings(){
     hint.textContent='Drag vacant callings here';
     body.appendChild(hint);
   } else {
+    // Same grid structure as No Calling chips so they get identical column sizing
     const gridOuter=document.createElement('div'); gridOuter.className='tray-chip-grid';
     const gridInner=document.createElement('div'); gridInner.className='tray-chip-grid-inner pot-chip-grid';
     gridOuter.appendChild(gridInner);
 
     state.potentialCallings.forEach(pc=>{
-      const orgCol=state.columns.find(c=>c.id===pc.colId);
       const chip=document.createElement('div');
       chip.className='tray-chip gender-M';
       chip.draggable=true;
@@ -3517,14 +3534,15 @@ function renderPotentialCallings(){
       chip.appendChild(nameEl);
       const del=document.createElement('span');
       del.className='tray-chip-del';
-      del.textContent='×';
-      del.onclick=e=>{ e.stopPropagation(); snapshot(); state.potentialCallings=state.potentialCallings.filter(x=>x.id!==pc.id); renderPotentialCallings(); scheduleSave(); };
+      del.textContent='\u00d7';
+      del.onclick=e=>{ e.stopPropagation(); snapshot(); state.potentialCallings=state.potentialCallings.filter(x=>x.id!==pc.id); renderPotentialCallings(); updateTrayColumns(); scheduleSave(); };
       chip.appendChild(del);
       gridInner.appendChild(chip);
     });
     body.appendChild(gridOuter);
   }
 
+  panel.appendChild(resizeH);
   panel.appendChild(head);
   panel.appendChild(body);
   inner.appendChild(panel);
@@ -3565,10 +3583,15 @@ function updateTrayColumns(){
   if(!pane||!trayOpen) return;
   const w=pane.offsetWidth;
   const cols=w>=400?3:w>=220?2:1;
-  document.querySelectorAll('.tray-chip-grid-inner:not(.pot-chip-grid)').forEach(inner=>{
-    inner.style.columnCount=cols;
-    inner.style.columnGap='0';
-    inner.querySelectorAll('.tray-chip').forEach(c=>{ c.style.width='100%'; c.style.boxSizing='border-box'; c.style.display='block'; });
+  document.querySelectorAll('.tray-chip-grid-inner').forEach(inner=>{
+    const chips=inner.querySelectorAll('.tray-chip');
+    if(!chips.length){ inner.style.height=''; return; }
+    // Each chip is a fixed-width column cell; flow them top-to-bottom then wrap.
+    chips.forEach(c=>{ c.style.width=(100/cols).toFixed(3)+'%'; c.style.boxSizing='border-box'; c.style.display='block'; });
+    // Measure one chip's height, set container height so flex-wrap breaks into `cols` columns.
+    const chipH=chips[0].offsetHeight||30;
+    const perCol=Math.ceil(chips.length/cols);
+    inner.style.height=(perCol*chipH)+'px';
   });
 }
 
