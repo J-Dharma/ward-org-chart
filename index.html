@@ -469,7 +469,7 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
 .band-settings:hover { opacity: 1; background: var(--surface-2); }
 .band-spacer { flex: 1; }
 
-/* Band body — CSS grid, columns set inline by JS */
+/* Band body — flex row of slot wrappers */
 .band-body {
   display: flex;
   align-items: stretch;
@@ -477,6 +477,8 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
   overflow-y: visible;
   scrollbar-width: thin;
   min-height: 80px;
+  /* overflow-x:auto forces overflow-y:auto in CSS spec — work around with clip */
+  overflow-clip-margin: 0;
 }
 .band-body::-webkit-scrollbar { height: 5px; }
 .band-body::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
@@ -575,8 +577,8 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
 }
 .sg-head-add:hover { color: var(--navy); background: var(--navy-soft); }
 .sg-empty { padding: 16px 14px; color: var(--ink-4); font-size: 11px; font-style: italic; text-align: center; pointer-events: none; }
-/* Ensure sg-col is always tall enough to be a drop target */
-.sg-col { min-height: 60px; }
+/* Ensure sg-col is always a valid drop target even when empty */
+.sg-col { min-height: 40px; }
 
 /* ── ROW-LEVEL DRAG ZONES ── */
 .row-drop-above { display: contents; } /* invisible to grid/flex layout */
@@ -2374,7 +2376,7 @@ function buildLayout(){
     slotGroups.forEach((group, groupIdx)=>{
       // Slot wrapper — this is the actual flex column
       const slotWrapper = document.createElement('div');
-      slotWrapper.style.cssText = 'display:flex;flex-direction:column;flex:1 1 0;min-width:0;border-right:1px solid var(--line);overflow:hidden;';
+      slotWrapper.style.cssText = 'display:flex;flex-direction:column;flex:1 1 0;min-width:0;border-right:1px solid var(--line);';
 
       // Reorder drop zone before this slot
       body.appendChild(makeSgDropZone(col.id, group.items[0].sg.id));
@@ -3482,6 +3484,15 @@ function renderPotentialCallings(){
       const nameEl=document.createElement('div');
       nameEl.className='tray-chip-name';
       nameEl.textContent=pc.role||'Unnamed calling';
+      nameEl.contentEditable='true';
+      nameEl.style.outline='none';
+      nameEl.addEventListener('click',e=>e.stopPropagation());
+      nameEl.addEventListener('blur',()=>{
+        const newRole=nameEl.textContent.trim();
+        if(newRole&&newRole!==pc.role){ pc.role=newRole; scheduleSave(); }
+        else nameEl.textContent=pc.role||'Unnamed calling';
+      });
+      nameEl.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); nameEl.blur(); } e.stopPropagation(); });
       chip.appendChild(nameEl);
 
       const del=document.createElement('div');
@@ -4765,12 +4776,22 @@ function applySyncUrl(){
 }
 
 async function loadLatestFromSheets(){
-  const data=await loadFromSheets();
-  if(!data){ setSaveStatus('⚠ Could not load from cloud','#e07060'); return; }
+  setSaveStatus('Checking cloud…','rgba(255,255,255,0.5)');
+  let data;
+  try { data=await loadFromSheets(); } catch(e){ setSaveStatus('⚠ Could not reach cloud','#e07060'); return; }
+  if(!data){ setSaveStatus('⚠ No data in cloud yet','#e07060'); return; }
+  if(!data.columns||!data.people){ setSaveStatus('⚠ Cloud data unreadable','#e07060'); return; }
+  const cloudTime=data.savedAt||0;
+  const localTime=state._savedAt||0;
+  if(cloudTime>0&&cloudTime<=localTime){
+    setSaveStatus('Already up to date ✓');
+    document.getElementById('sync-panel')&&document.getElementById('sync-panel').remove();
+    return;
+  }
   applyLoadedState(data);
   saveLocal(data);
   backfillStartDates();
-  buildLayout(); renderTray(); renderFilterPanel(); renderQuickCats();
+  buildLayout(); renderTray(); renderFdOrgList(); renderPotentialCallings(); setTimeout(updateTrayColumns,100);
   setSaveStatus('☁ Loaded from cloud');
   document.getElementById('sync-panel')&&document.getElementById('sync-panel').remove();
 }
