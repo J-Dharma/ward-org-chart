@@ -4619,15 +4619,31 @@ async function saveToSheets(payload){
     for(let i=0;i<compressed.length;i+=CHUNK) chunks.push(compressed.slice(i,i+CHUNK));
     const total=chunks.length;
     const saveId=Date.now();
+    console.log(`saveToSheets: ${total} chunks, ${compressed.length} chars total, saveId=${saveId}`);
 
-    // Send chunks SEQUENTIALLY so they arrive in order (parallel sends can
-    // scramble chunk order on the Apps Script side, corrupting the data).
+    // Send chunks SEQUENTIALLY so they arrive in order.
     let assembledFlag=false;
     for(let i=0;i<chunks.length;i++){
-      const r=await fetch(`${url}?action=chunk&id=${saveId}&i=${i}&total=${total}&d=${encodeURIComponent(chunks[i])}`)
-        .then(r=>r.json());
-      if(!r.ok) throw new Error(r.error || 'A chunk failed at index '+i);
-      if(r.assembled) assembledFlag=true;
+      const reqUrl=`${url}?action=chunk&id=${saveId}&i=${i}&total=${total}&d=${encodeURIComponent(chunks[i])}`;
+      let r;
+      try{
+        const resp=await fetch(reqUrl);
+        const text=await resp.text();
+        try{ r=JSON.parse(text); }
+        catch(parseErr){
+          console.error(`Chunk ${i}: response was not JSON. Raw response:`, text.slice(0,300));
+          throw new Error('Apps Script returned non-JSON (chunk '+i+'). Check deployment. Response starts: '+text.slice(0,80));
+        }
+      }catch(netErr){
+        throw new Error('Network error sending chunk '+i+': '+netErr.message);
+      }
+      console.log(`Chunk ${i}/${total-1} response:`, JSON.stringify(r));
+      if(!r.ok) throw new Error(r.error || 'Apps Script rejected chunk '+i);
+      if(r.assembled){ assembledFlag=true; console.log(`Cloud assembled OK — A1 length ${r.length}`); }
+    }
+
+    if(!assembledFlag){
+      throw new Error('All chunks sent but Apps Script never reported assembly. The deployed script is likely an old version — redeploy with a NEW VERSION.');
     }
 
     const now=new Date();
@@ -4635,7 +4651,7 @@ async function saveToSheets(payload){
     return true;
   } catch(err){
     console.warn('Sheets save failed:',err);
-    setSaveStatus('⚠ Cloud save failed — saved locally', '#e07060');
+    setSaveStatus('⚠ '+err.message, '#e07060');
     return false;
   }
 }
