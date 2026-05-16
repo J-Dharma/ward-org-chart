@@ -3363,10 +3363,18 @@ function renderTray(){
         const yLine=document.createElement('div'); yLine.className='sg-head-line';
         const yCnt=document.createElement('span'); yCnt.style.cssText='font-size:10px;color:var(--ink-3);flex-shrink:0;'; yCnt.textContent=youthPeople.length;
         yHead.append(yChev,yLbl,yLine,yCnt);
-        const yInner=document.createElement('div'); yInner.className='tray-chip-grid-inner'; yInner.dataset.sgId='youth';
-        youthPeople.forEach(p=>yInner.appendChild(makeTrayChip(p)));
+        yHead.addEventListener('click',()=>{ yHead.nextElementSibling&&yHead.nextElementSibling.classList.toggle('collapsed'); });
         grid.appendChild(yHead);
-        grid.appendChild(yInner);
+        // Gender sub-grouping within Youth — same as free agents
+        const youthGroups=genderSplit(youthPeople);
+        youthGroups.forEach(g=>{
+          if(g.label&&youthGroups.length>1){
+            const lbl=document.createElement('div'); lbl.className='tray-gender-divider'; lbl.textContent=g.label; grid.appendChild(lbl);
+          }
+          const yInner=document.createElement('div'); yInner.className='tray-chip-grid-inner'; yInner.dataset.sgId='__youth__';
+          g.people.forEach(p=>yInner.appendChild(makeTrayChip(p)));
+          grid.appendChild(yInner);
+        });
       }
     } else {
       // Named group: gender sub-grouping
@@ -3725,13 +3733,7 @@ function openColSettings(colId){
   });
 
   function renderCatChips(){} // no-op — category UI removed
-
-  modal.querySelector('#cs-newcat').addEventListener('keydown',e=>{ if(e.key==='Enter') addCategory(); });
-  window._addCategoryFn=()=>{
-    const inp=modal.querySelector('#cs-newcat'); const name=inp.value.trim();
-    if(!name||state.categories.includes(name)) return;
-    state.categories.push(name); inp.value=''; renderCatChips(); renderFilterPanel(); renderQuickCats();
-  };
+  window._addCategoryFn=null;
 
   // If org has auto-detected subgroups (no manual ones yet), materialize them now
   // so the settings list shows something meaningful
