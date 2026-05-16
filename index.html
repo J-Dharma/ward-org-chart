@@ -761,7 +761,7 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
 }
 #tray-group-toggle span { opacity: 0.5; }
 #tray-group-toggle span.active { opacity: 1; color: var(--ink); font-weight: 600; }
-#tray-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; display: block; }
+#tray-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: block; }
 .tray-gender-divider {
   font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;
   color:var(--ink-3);padding:6px 10px 2px;width:100%;
@@ -3415,7 +3415,7 @@ function renderPotentialCallings(){
   panel.id='pot-panel';
   // Fixed height panel at the bottom — use height (not max-height) so offsetHeight works
   if(!state._potHeight) state._potHeight=120;
-  panel.style.cssText=`flex-shrink:0;display:flex;flex-direction:column;border-top:2px solid var(--line-2);background:var(--surface);height:${state._potCollapsed?'auto':state._potHeight+'px'};overflow:hidden;`;
+  panel.style.cssText=`flex-shrink:0;position:relative;z-index:2;display:flex;flex-direction:column;border-top:2px solid var(--line-2);background:var(--surface);height:${state._potCollapsed?'auto':state._potHeight+'px'};overflow:hidden;`;
 
   // ── Resize handle at top ──
   const resizeH=document.createElement('div');
