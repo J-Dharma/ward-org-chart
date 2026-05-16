@@ -1143,7 +1143,7 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
           <button class="overflow-item" style="color:#b45309;font-weight:700;" onclick="importFromLive();toggleOverflowMenu()">↓ Import from Live Data</button>
           <div style="border-top:1px solid var(--line);margin:4px 0;"></div>
         <div class="fd-section" style="padding:4px 0;">
-          <button class="overflow-item" onclick="toggleOverflowMenu();setTimeout(toggleSyncPanel,10)">☁ Sync to Google Sheets</button>
+          <button class="overflow-item" onclick="toggleOverflowMenu();alert('Cloud sync is disabled in the sandbox.')" style="color:var(--ink-4);cursor:not-allowed;">☁ Sync to Google Sheets (disabled)</button>
           <div style="height:1px;background:var(--line);margin:4px 0;"></div>
           <button class="overflow-item" onclick="exportJSON();toggleOverflowMenu()">↓ Backup (JSON)</button>
           <button class="overflow-item" onclick="document.getElementById('json-import').click();toggleOverflowMenu()">↑ Restore backup (JSON)</button>
@@ -4667,7 +4667,17 @@ async function saveToSheets(payload){
   }
 }
 
-// ── SANDBOX: import live data ─────────────────────────────────────────────────
+// ── SANDBOX: disable all cloud sync ──────────────────────────────────────────
+// Override every sync entry point so the sandbox can never touch the cloud,
+// even if a URL is somehow present in localStorage.
+syncEnabled = false;
+function getSheetsUrl(){ return ''; }
+function saveToSheets(){ return Promise.resolve(false); }
+function forceSaveToSheets(){ alert('Cloud sync is disabled in the sandbox.'); }
+function loadLatestFromSheets(){ alert('Cloud sync is disabled in the sandbox.'); }
+function toggleSyncPanel(){ alert('Cloud sync is disabled in the sandbox.'); }
+function applySyncUrl(){ alert('Cloud sync is disabled in the sandbox.'); }
+
 function importFromLive(){
   const LIVE_KEY='ward-org-chart-v1';
   const raw=localStorage.getItem(LIVE_KEY);
