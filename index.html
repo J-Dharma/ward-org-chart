@@ -3413,44 +3413,13 @@ function renderPotentialCallings(){
 
   const panel=document.createElement('div');
   panel.id='pot-panel';
-  if(!state._potHeight) state._potHeight=120;
-  // Panel uses natural height (header + body) — no fixed height on the container.
-  // Only the scrollable body gets a max-height, controlled by the resize handle.
-  panel.style.cssText='flex-shrink:0;position:relative;z-index:2;display:flex;flex-direction:column;border-top:2px solid var(--line-2);background:var(--surface);';
-
-  // ── Resize handle at top ──
-  const resizeH=document.createElement('div');
-  resizeH.id='pot-resize-handle';
-  resizeH.style.cssText='height:8px;cursor:ns-resize;background:transparent;flex-shrink:0;display:flex;align-items:center;justify-content:center;';
-  resizeH.innerHTML='<div style="width:32px;height:2px;border-radius:1px;background:var(--line-2);pointer-events:none;"></div>';
-  resizeH.addEventListener('mousedown',e=>{
-    if(state._potCollapsed) return;
-    e.preventDefault();
-    const startY=e.clientY;
-    const startH=state._potHeight;
-    const onMove=ev=>{
-      const delta=startY-ev.clientY; // drag up = bigger
-      const newH=Math.max(60, Math.min(400, startH+delta));
-      state._potHeight=newH;
-      body.style.maxHeight=newH+'px';
-    };
-    const onUp=()=>{
-      document.removeEventListener('mousemove',onMove);
-      document.removeEventListener('mouseup',onUp);
-      scheduleSave();
-    };
-    document.addEventListener('mousemove',onMove);
-    document.addEventListener('mouseup',onUp);
-  });
-  panel.appendChild(resizeH);
+  panel.style.cssText='flex-shrink:0;border-top:2px solid var(--line-2);background:var(--surface);';
 
   // ── Header ──
   const head=document.createElement('div');
   head.className='tray-section-head';
-  head.style.cssText='flex-shrink:0;border-top:none;';
-  const chev=document.createElement('span');
-  chev.className='tray-section-chevron';
-  chev.textContent='▾';
+  head.style.cssText='flex-shrink:0;border-top:none;cursor:pointer;';
+  const chev=document.createElement('span'); chev.className='tray-section-chevron'; chev.textContent='▾';
   if(state._potCollapsed) chev.style.transform='rotate(-90deg)';
   const lbl=document.createElement('span'); lbl.className='sg-head-label'; lbl.textContent='Potential Callings';
   const line=document.createElement('div'); line.className='sg-head-line';
@@ -3458,22 +3427,24 @@ function renderPotentialCallings(){
   cnt.style.cssText='font-size:10px;color:var(--ink-3);flex-shrink:0;font-variant-numeric:tabular-nums;';
   cnt.textContent=state.potentialCallings.length;
   head.append(chev, lbl, line, cnt);
+
+  // ── Body ──
+  const body=document.createElement('div');
+  body.style.cssText='overflow-y:auto;max-height:180px;'+(state._potCollapsed?'display:none;':'');
+
   head.addEventListener('click',()=>{
     state._potCollapsed=!state._potCollapsed;
     if(state._potCollapsed){
       body.style.display='none';
-      resizeH.style.display='none';
       chev.style.transform='rotate(-90deg)';
     } else {
       body.style.display='';
-      body.style.maxHeight=state._potHeight+'px';
-      resizeH.style.display='';
       chev.style.transform='';
     }
     scheduleSave();
   });
-  panel.appendChild(head);
 
+  // Drop zone — whole panel accepts vacant callings
   panel.addEventListener('dragover',e=>{
     if(!dragId) return;
     const dragging=state.people.find(x=>x.id===dragId);
@@ -3481,11 +3452,6 @@ function renderPotentialCallings(){
   });
   panel.addEventListener('drop',e=>{ e.stopPropagation(); });
 
-  // ── Body — scrollable, multi-column grid, full drop target ──
-  const body=document.createElement('div');
-  body.style.cssText=`overflow-y:auto;min-height:0;max-height:${state._potHeight}px;`+(state._potCollapsed?'display:none;':'');
-
-  // Drop zone for vacant callings - covers entire body
   body.addEventListener('dragover',e=>{
     if(!dragId) return;
     const dragging=state.people.find(x=>x.id===dragId);
@@ -3499,7 +3465,6 @@ function renderPotentialCallings(){
     if(dragging&&dragging.vacant){
       snapshot();
       state.potentialCallings.push({id:mkid(), role:dragging.role, colId:dragging.colId, subgroupId:dragging.subgroupId});
-      // Remove the vacant from the org chart
       state.people=state.people.filter(x=>x.id!==dragging.id);
       renderPotentialCallings(); buildLayout(); scheduleSave();
     }
@@ -3511,7 +3476,6 @@ function renderPotentialCallings(){
     hint.textContent='Drag vacant callings here';
     body.appendChild(hint);
   } else {
-    // Same grid structure as tray chips so updateTrayColumns applies
     const gridOuter=document.createElement('div'); gridOuter.className='tray-chip-grid';
     const gridInner=document.createElement('div'); gridInner.className='tray-chip-grid-inner pot-chip-grid';
     gridOuter.appendChild(gridInner);
@@ -3519,7 +3483,7 @@ function renderPotentialCallings(){
     state.potentialCallings.forEach(pc=>{
       const orgCol=state.columns.find(c=>c.id===pc.colId);
       const chip=document.createElement('div');
-      chip.className='tray-chip gender-M'; // gender-M gives the consistent navy/blue left bar
+      chip.className='tray-chip gender-M';
       chip.draggable=true;
       chip.addEventListener('dragstart',e=>{
         potDragId=pc.id;
@@ -3528,7 +3492,6 @@ function renderPotentialCallings(){
         setTimeout(()=>chip.classList.add('dragging'),0);
       });
       chip.addEventListener('dragend',()=>{ potDragId=null; chip.classList.remove('dragging'); });
-
       const nameEl=document.createElement('div');
       nameEl.className='tray-chip-name';
       nameEl.textContent=pc.role||'Unnamed calling';
@@ -3542,30 +3505,21 @@ function renderPotentialCallings(){
       });
       nameEl.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); nameEl.blur(); } e.stopPropagation(); });
       chip.appendChild(nameEl);
-
-      const del=document.createElement('div');
+      const del=document.createElement('span');
       del.className='tray-chip-del';
       del.textContent='×';
       del.onclick=e=>{ e.stopPropagation(); snapshot(); state.potentialCallings=state.potentialCallings.filter(x=>x.id!==pc.id); renderPotentialCallings(); scheduleSave(); };
       chip.appendChild(del);
-
       gridInner.appendChild(chip);
     });
-
     body.appendChild(gridOuter);
-    // Apply current column widths immediately
-    const pane=document.getElementById('tray-pane');
-    if(pane){
-      const w=pane.offsetWidth;
-      const cols=w>=400?3:w>=220?2:1;
-      const pct=(100/cols).toFixed(3)+'%';
-      gridInner.querySelectorAll('.tray-chip').forEach(c=>{ c.style.width=pct; c.style.boxSizing='border-box'; });
-    }
   }
 
+  panel.appendChild(head);
   panel.appendChild(body);
   inner.appendChild(panel);
 }
+
 
 function makeTrayDropZone(trayGroupId, beforePid){
   const zone=document.createElement('div');
