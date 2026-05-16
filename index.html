@@ -3602,11 +3602,16 @@ function updateTrayColumns(){
   if(!pane||!trayOpen) return;
   const w=pane.offsetWidth;
   const cols=w>=400?3:w>=220?2:1;
-  document.querySelectorAll('.tray-chip-grid-inner').forEach(inner=>{
+  document.querySelectorAll('.tray-chip-grid-inner:not(.pot-chip-grid)').forEach(inner=>{
     inner.style.columnCount=cols;
     inner.style.columnGap='0';
-    // Reset any old per-chip width styles
     inner.querySelectorAll('.tray-chip').forEach(c=>{ c.style.width='100%'; c.style.boxSizing='border-box'; c.style.display='block'; });
+  });
+  // Pot chips always single column, flex layout
+  document.querySelectorAll('.pot-chip-grid').forEach(inner=>{
+    inner.style.columnCount='';
+    inner.style.display='flex';
+    inner.style.flexWrap='wrap';
   });
 }
 
