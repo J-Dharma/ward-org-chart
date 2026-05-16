@@ -3864,38 +3864,24 @@ function clearOrgToTray(colId, sgId){
 }
 
 function deleteOrgFromSettings(colId){
-  const btn=document.getElementById('cs-delete-btn'); if(!btn) return;
-  if(!_deleteOrgArmed){
-    _deleteOrgArmed=true;
-    btn.textContent='Confirm delete?';
-    btn.style.cssText='background:#b03030;color:white;border-color:#b03030;font-weight:600;';
-    setTimeout(()=>{
-      _deleteOrgArmed=false;
-      if(btn.parentElement){ btn.textContent='Delete Org'; btn.style.cssText='color:#b03030;border-color:#e0b0b0;background:transparent;'; }
-    }, 3000);
-    return;
-  }
-  // Confirmed — move all people in this org to the tray, then remove the org
+  if(!confirm('Delete this org?\n\nFilled callings move to No Calling. Vacant slots are removed. This cannot be undone.')) return;
   snapshot();
-  const col=state.columns.find(c=>c.id===colId);
-  const orgName=col?col.name:'';
+  const col=state.columns.find(c=>c.id===colId); if(!col) return;
+  const orgName=col.name;
+  const now=new Date().toISOString().slice(0,7);
+  // Separate vacants (delete them) from filled (move to tray)
+  const toDelete=new Set(state.people.filter(p=>p.colId===colId&&p.vacant).map(p=>p.id));
   state.people.forEach(p=>{
-    if(p.colId===colId){
-      // Save to history before moving
-      if(!p.vacant && p.role){
-        if(!p.history) p.history=[];
-        const now=new Date().toISOString().slice(0,7);
-        p.history.forEach(h=>{ if(h.current){ h.current=false; if(!h.endDate) h.endDate=now; } });
-        p.history.unshift({calling:p.role, org:orgName, startDate:p.startDate||null, endDate:now, current:false, years:calcTenure(p).toFixed(1)});
-      }
-      p.colId=TRAY; p.subgroupId=null; p.role=''; p.startDate=null; p.endDate=null;
+    if(p.colId!==colId||p.vacant) return;
+    if(p.role){
+      if(!p.history) p.history=[];
+      p.history.forEach(h=>{ if(h.current){ h.current=false; if(!h.endDate) h.endDate=now; } });
+      p.history.unshift({calling:p.role,org:orgName,startDate:p.startDate||null,endDate:now,current:false,years:calcTenure(p).toFixed(1)});
     }
+    p.colId=TRAY; p.subgroupId=null; p.role=''; p.startDate=null; p.endDate=null; p.trayGroupId=null;
   });
-  // Remove vacant rows (they belong to the org, not a person)
-  state.people=state.people.filter(p=>!(p.colId===TRAY&&p.vacant&&p.name==='VACANT'&&false)); // vacants already moved above with colId change
-  state.people=state.people.filter(p=>!p.vacant||p.colId!==TRAY); // remove any vacants that ended up in tray
+  state.people=state.people.filter(p=>!toDelete.has(p.id));
   state.columns=state.columns.filter(c=>c.id!==colId);
-  _deleteOrgArmed=false;
   closeModal(); buildLayout(); renderJumpNav(); renderTray(); renderFdOrgList(); scheduleSave();
 }
 
@@ -4040,15 +4026,7 @@ function openAddDialog(defaultTab){
           <button type="button" class="add-toggle" data-val="" id="add-og-any"  style="flex:1;padding:5px;border:1px solid var(--line-2);border-radius:5px;cursor:pointer;font-size:11px;background:var(--navy);color:#fff;font-family:inherit;">All</button>
           <button type="button" class="add-toggle" data-val="M" id="add-og-m"   style="flex:1;padding:5px;border:1px solid var(--line-2);border-radius:5px;cursor:pointer;font-size:11px;background:var(--surface-2);color:var(--ink-2);font-family:inherit;">Brothers</button>
           <button type="button" class="add-toggle" data-val="F" id="add-og-f"   style="flex:1;padding:5px;border:1px solid var(--line-2);border-radius:5px;cursor:pointer;font-size:11px;background:var(--surface-2);color:var(--ink-2);font-family:inherit;">Sisters</button>
-        </div>
-        <label>Category</label>
-        <select id="add-org-cat">
-          <option value="">— None —</option>
-          ${state.categories.map(c=>`<option value="${c}">${c}</option>`).join('')}
-          <option value="Adult">Adult</option>
-          <option value="Youth">Youth</option>
-          <option value="Stake">Stake</option>
-        </select>`;
+        </div>`;
       setTimeout(()=>{
         const ni=document.getElementById('add-org-name'); if(ni){ ni.focus(); ni.addEventListener('keydown',e=>{ if(e.key==='Enter') doAddOrg(overlay); }); }
         // Wire gender toggle
@@ -4117,7 +4095,7 @@ function doAddCalling(overlay){
 
 function doAddOrg(overlay){
   const name=(document.getElementById('add-org-name')||{}).value.trim(); if(!name) return;
-  const cat=(document.getElementById('add-org-cat')||{}).value||'';
+  const cat='';
   const ogBtn=['add-og-m','add-og-f'].find(id=>{ const el=document.getElementById(id); return el&&el.style.background.includes('navy'); });
   const orgGenderVal=ogBtn?document.getElementById(ogBtn).dataset.val:'';
   snapshot();
@@ -4515,7 +4493,7 @@ function openPersonCard(pid, showLinked){
   saveBtn.textContent='Save';
   saveBtn.onclick=()=>saveAndCloseCard(pid,true);
 
-  if(p.colId!==TRAY) footer.appendChild(delBtn);
+  footer.appendChild(delBtn);
   footer.append(cancelBtn, saveBtn);
   card.appendChild(footer);
 

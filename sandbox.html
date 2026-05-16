@@ -1140,6 +1140,8 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
     <div class="filter-menu" id="overflow-menu-wrap">
       <button class="filter-menu-btn" id="overflow-menu-btn" onclick="toggleOverflowMenu()" title="More options">•••</button>
       <div id="overflow-dropdown">
+          <button class="overflow-item" style="font-weight:700;" onclick="toggleOverflowMenu();window.open('index.html','_blank')">← Back to Live App</button>
+          <div style="height:1px;background:var(--line);margin:4px 0;"></div>
           <button class="overflow-item" style="color:#b45309;font-weight:700;" onclick="importFromLive();toggleOverflowMenu()">↓ Import from Live Data</button>
           <div style="border-top:1px solid var(--line);margin:4px 0;"></div>
         <div class="fd-section" style="padding:4px 0;">
