@@ -4629,7 +4629,7 @@ async function saveToSheets(payload){
   try{
     setSaveStatus('Saving…', 'rgba(255,255,255,0.5)');
     const json=JSON.stringify(payload);
-    const compressed=LZString.compressToUTF16(json);
+    const compressed=LZString.compress(json);
     // Hex-encode so the data survives URL transport with zero corruption.
     const hex=strToHex(compressed);
 
@@ -4727,13 +4727,14 @@ async function loadFromSheets(){
       const direct=tryParse(raw);
       if(direct) return direct;
 
-      // NEW FORMAT: hex-encoded LZString-UTF16. Detect: only hex chars, even length.
+      // NEW FORMAT: hex-encoded LZString.compress output.
+      // Detect: only hex chars, length divisible by 4.
       if(/^[0-9a-fA-F]+$/.test(raw) && raw.length%4===0){
         try{
           const compressed=hexToStr(raw);
-          const d=LZString.decompressFromUTF16(compressed);
+          const d=LZString.decompress(compressed);
           const o=tryParse(d);
-          if(o){ console.log('coerce: decoded via hex+UTF16'); return o; }
+          if(o){ console.log('coerce: decoded via hex+LZString.decompress'); return o; }
         }catch(e){ console.warn('hex decode failed:',e); }
       }
 
@@ -4741,7 +4742,7 @@ async function loadFromSheets(){
       const candidates=[raw];
       if(raw.indexOf(' ')>=0) candidates.push(raw.replace(/ /g,'+'));
       if(typeof LZString!=='undefined'){
-        const methods=['decompressFromUTF16','decompressFromEncodedURIComponent','decompressFromBase64','decompress'];
+        const methods=['decompressFromEncodedURIComponent','decompressFromBase64','decompress'];
         for(const s of candidates){
           for(const m of methods){
             try{
