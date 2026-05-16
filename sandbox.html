@@ -597,6 +597,8 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
 .person-row.dragging { opacity: 0.35; }
 .person-row.search-match { background: rgba(255,220,120,0.3) !important; }
 .person-row.search-dim { opacity: 0.25; }
+.tray-chip.search-match { background: rgba(255,220,120,0.45) !important; }
+.tray-chip.search-dim   { opacity: 0.25; }
 
 /* Gender left-bar */
 .person-row.gender-M { border-left-color: #1473b5; }
@@ -703,7 +705,7 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
 /* ── TRAY ── */
 #tray-pane {
   flex-shrink: 0; width: 396px;
-  min-width: 120px; max-width: 600px;
+  min-width: 180px; max-width: 600px;
   background: var(--surface);
   border-left: 1px solid var(--line);
   display: flex; flex-direction: column;
@@ -742,7 +744,8 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
 #tray-head {
   padding: 10px 12px 9px;
   border-bottom: 2px solid var(--accent);
-  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+  flex-wrap: wrap;
   background: var(--navy);
   position: relative;
 }
@@ -758,7 +761,7 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
 }
 #tray-group-toggle span { opacity: 0.5; }
 #tray-group-toggle span.active { opacity: 1; color: var(--ink); font-weight: 600; }
-#tray-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; display: block; }
+#tray-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: block; }
 .tray-gender-divider {
   font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;
   color:var(--ink-3);padding:6px 10px 2px;width:100%;
@@ -785,7 +788,13 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
 .tray-section.collapsed .tray-chip-grid { display:none; }
 .tray-section.collapsed .tray-section-drop { display:none; }
 .tray-chip-grid { }
-.tray-chip-grid-inner { display: flex; flex-wrap: wrap; align-content: start; }
+.tray-chip-grid-inner {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  /* height set dynamically by updateTrayColumns so columns flow top-to-bottom */
+}
 .tray-chip {
   display:flex; align-items:center; gap:4px; padding:6px 12px 6px 10px;
   cursor:grab; border-bottom:1px solid var(--line);
@@ -815,9 +824,11 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
 .tray-chip:hover .tray-chip-del { opacity: 1; }
 .tray-chip-del:hover { color: #c0392b; }
 #tray-drop-end {
-  min-height: 40px; border: 1px dashed transparent; margin: 8px; border-radius: 6px;
+  min-height: 10px; border: 1px dashed transparent; margin: 0 8px;
+  border-radius: 6px; flex-shrink: 0;
+  transition: min-height 0.1s;
 }
-#tray-drop-end.drag-over { border-color: var(--accent); background: var(--accent-soft); }
+#tray-drop-end.drag-over { border-color: var(--accent); background: var(--accent-soft); min-height: 44px; }
 
 /* ── MODAL ── */
 .modal-overlay {
@@ -1140,15 +1151,13 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
     <div class="filter-menu" id="overflow-menu-wrap">
       <button class="filter-menu-btn" id="overflow-menu-btn" onclick="toggleOverflowMenu()" title="More options">•••</button>
       <div id="overflow-dropdown">
-          <button class="overflow-item" style="font-weight:700;" onclick="toggleOverflowMenu();window.open('index.html','_blank')">← Back to Live App</button>
-          <div style="height:1px;background:var(--line);margin:4px 0;"></div>
-          <button class="overflow-item" style="color:#b45309;font-weight:700;" onclick="importFromLive();toggleOverflowMenu()">↓ Import from Live Data</button>
-          <div style="border-top:1px solid var(--line);margin:4px 0;"></div>
         <div class="fd-section" style="padding:4px 0;">
-          <button class="overflow-item" onclick="toggleOverflowMenu();alert('Cloud sync is disabled in the sandbox.')" style="color:var(--ink-4);cursor:not-allowed;">☁ Sync to Google Sheets (disabled)</button>
+          <button class="overflow-item" style="font-weight:700;" onclick="toggleOverflowMenu();window.open('index.html','_blank')">← Back to Live App</button>
+          <button class="overflow-item" style="color:#b45309;font-weight:700;" onclick="importFromLive();toggleOverflowMenu()">↓ Import from Live Data</button>
+          <button class="overflow-item" onclick="toggleOverflowMenu();alert('Cloud sync is disabled in the sandbox.')" style="color:var(--ink-4);cursor:not-allowed;">☁ Sync (disabled in sandbox)</button>
           <div style="height:1px;background:var(--line);margin:4px 0;"></div>
-          <button class="overflow-item" onclick="exportJSON();toggleOverflowMenu()">↓ Backup (JSON)</button>
-          <button class="overflow-item" onclick="document.getElementById('json-import').click();toggleOverflowMenu()">↑ Restore backup (JSON)</button>
+          <button class="overflow-item" onclick="exportJSON();toggleOverflowMenu()">↓ Backup (JSON) — local download</button>
+          <button class="overflow-item" onclick="document.getElementById('json-import').click();toggleOverflowMenu()">↑ Restore backup (JSON) — local file</button>
           <input type="file" id="json-import" accept=".json" style="display:none" onchange="importJSON(this)" />
           <div style="height:1px;background:var(--line);margin:4px 0;"></div>
           <button class="overflow-item" onclick="exportCSV();toggleOverflowMenu()">↓ Export CSV (callings list)</button>
@@ -1747,14 +1756,9 @@ const genderMap={};
 noCalling.forEach(p=>{ genderMap[p.name.toLowerCase()]=p.gender; });
 
 // Orgs that are exclusively one gender
-const MALE_ORGS=['Bishopric','Elders Quorum','Young Men'];
-const FEMALE_ORGS=['Relief Society','Young Women'];
-
 function orgGender(col){
   if(!col) return null;
   if(col.orgGender) return col.orgGender;
-  if(MALE_ORGS.some(o=>col.name.includes(o))) return 'M';
-  if(FEMALE_ORGS.some(o=>col.name.includes(o))) return 'F';
   return null;
 }
 function inferGender(person){ return person.gender||null; }
@@ -1881,6 +1885,24 @@ function toggleAutoSg(on){
 
 // Run migration on all orgs. Idempotent — safe to call multiple times.
 function migrateAllOrgs(){
+  // Migrate user-created "Youth" tray groups to __youth__ built-in
+  if(state.trayGroups){
+    const youthTg=state.trayGroups.find(g=>g.name==='Youth');
+    if(youthTg){
+      state.people.forEach(p=>{ if(p.trayGroupId===youthTg.id) p.trayGroupId='__youth__'; });
+      state.trayGroups=state.trayGroups.filter(g=>g.id!==youthTg.id);
+    }
+  }
+  // Also backfill any youth people with null trayGroupId
+  state.people.forEach(p=>{ if(p.colId===TRAY&&p.ageGroup==='Youth'&&!p.trayGroupId) p.trayGroupId='__youth__'; });
+  const OLD_MALE   = ['Bishopric','Elders Quorum','Young Men'];
+  const OLD_FEMALE = ['Relief Society','Young Women'];
+  state.columns.forEach(col=>{
+    if(!col.orgGender){
+      if(OLD_MALE.some(o=>col.name.includes(o)))   col.orgGender='M';
+      if(OLD_FEMALE.some(o=>col.name.includes(o))) col.orgGender='F';
+    }
+  });
   state.columns.forEach(col=>{
     // Normalize slot/span/order on existing subgroups (fill in missing fields)
     col.subgroups.forEach((sg,i)=>{
@@ -2989,32 +3011,48 @@ function dropToTray(trayGroupId){
   snapshot();
   const p=state.people.find(x=>x.id===dragId);
   if(!p){ dragId=null; return; }
+
   if(p.colId!==TRAY && !p.vacant){
+    const col=state.columns.find(c=>c.id===p.colId);
+    const now=new Date().toISOString().slice(0,7);
+
+    // Record history before removing from this calling
     if(p.role){
-      const peers=state.people.filter(x=>x.colId===p.colId);
-      const srcPeer=peers[dragSrcIdx]||null;
-      const ins=srcPeer?state.people.indexOf(srcPeer):state.people.length;
-      state.people.splice(ins,0,{id:mkid(),name:'VACANT',role:p.role,colId:p.colId,subgroupId:p.subgroupId,time:0,vacant:true});
-      const col=state.columns.find(c=>c.id===p.colId);
-      const now=new Date().toISOString().slice(0,7);
       if(!p.history) p.history=[];
-      // Close current entry
       p.history.forEach(h=>{ if(h.current){ h.current=false; if(!h.endDate) h.endDate=now; h.years=calcTenure(p).toFixed(1); } });
-      // Add a closed entry if no matching one exists yet
       const alreadyRecorded=p.history.some(h=>h.calling===p.role&&(h.org||'')===(col?col.name:'')&&!h.current&&h.endDate===now);
       if(!alreadyRecorded){
         p.history.unshift({calling:p.role, org:col?col.name:'', years:calcTenure(p).toFixed(1), current:false, startDate:p.startDate||null, endDate:now});
       }
+
+      // Check if this person has OTHER callings (multi-calling)
+      const otherCallings=state.people.filter(x=>x.id!==p.id&&!x.vacant&&x.colId!==TRAY&&x.name===p.name);
+      if(otherCallings.length>0){
+        // They still have callings elsewhere — just leave a VACANT here, don't add to tray
+        const peers=state.people.filter(x=>x.colId===p.colId);
+        const srcPeer=peers[dragSrcIdx]||null;
+        const ins=srcPeer?state.people.indexOf(srcPeer):state.people.length;
+        state.people.splice(ins,0,{id:mkid(),name:'VACANT',role:p.role,colId:p.colId,subgroupId:p.subgroupId,time:0,vacant:true});
+        // Remove this calling instance entirely
+        const idx=state.people.findIndex(x=>x.id===p.id);
+        if(idx>=0) state.people.splice(idx,1);
+        dragId=null;
+        rebuildAll(); scheduleSave(); return;
+      }
+
+      // Single calling — leave VACANT, move person to tray
+      const peers=state.people.filter(x=>x.colId===p.colId);
+      const srcPeer=peers[dragSrcIdx]||null;
+      const ins=srcPeer?state.people.indexOf(srcPeer):state.people.length;
+      state.people.splice(ins,0,{id:mkid(),name:'VACANT',role:p.role,colId:p.colId,subgroupId:p.subgroupId,time:0,vacant:true});
     }
   }
+
   p.colId=TRAY; p.role=''; p.subgroupId=null; p.time=0; p.startDate=null; p.endDate=null;
 
-  // Youth auto-route to Youth tray group
+  // Youth auto-route to built-in Youth system group
   if(p.ageGroup==='Youth'){
-    if(!state.trayGroups) state.trayGroups=[];
-    let youthGroup=state.trayGroups.find(g=>g.name==='Youth');
-    if(!youthGroup){ youthGroup={id:mkid(), name:'Youth'}; state.trayGroups.push(youthGroup); }
-    p.trayGroupId=youthGroup.id;
+    p.trayGroupId='__youth__';
   } else {
     p.trayGroupId=trayGroupId||null;
   }
@@ -3223,7 +3261,7 @@ function renderTray(){
   }
 
   const sections=[
-    ...(showUngrouped?[{id:null, name:'', people:allPeople.filter(p=>!p.trayGroupId&&p.ageGroup!=='Youth'), isUngrouped:true}]:[]),
+    ...(showUngrouped?[{id:null, name:'', people:allPeople.filter(p=>!p.trayGroupId&&p.trayGroupId!=='__youth__'&&p.ageGroup!=='Youth'), isUngrouped:true}]:[]),
     ...(state.trayGroups||[])
       .filter(tg=>showAll||trayGroupFilter.has(tg.id))
       .map((tg)=>({id:tg.id, name:tg.name, tg, tgi:state.trayGroups.indexOf(tg),
@@ -3313,7 +3351,7 @@ function renderTray(){
     // Build chip grid with gender sub-grouping
     if(sec.isUngrouped){
       // Free Agents: also show Youth sub-section
-      const youthPeople=allPeople.filter(p=>!p.trayGroupId&&p.ageGroup==='Youth').sort(traySort);
+      const youthPeople=allPeople.filter(p=>p.trayGroupId==='__youth__'||(!p.trayGroupId&&p.ageGroup==='Youth')).sort(traySort);
       const adultGroups=genderSplit(sec.people);
 
       adultGroups.forEach(g=>{
@@ -3334,10 +3372,18 @@ function renderTray(){
         const yLine=document.createElement('div'); yLine.className='sg-head-line';
         const yCnt=document.createElement('span'); yCnt.style.cssText='font-size:10px;color:var(--ink-3);flex-shrink:0;'; yCnt.textContent=youthPeople.length;
         yHead.append(yChev,yLbl,yLine,yCnt);
-        const yInner=document.createElement('div'); yInner.className='tray-chip-grid-inner'; yInner.dataset.sgId='youth';
-        youthPeople.forEach(p=>yInner.appendChild(makeTrayChip(p)));
+        yHead.addEventListener('click',()=>{ yHead.nextElementSibling&&yHead.nextElementSibling.classList.toggle('collapsed'); });
         grid.appendChild(yHead);
-        grid.appendChild(yInner);
+        // Gender sub-grouping within Youth — same as free agents
+        const youthGroups=genderSplit(youthPeople);
+        youthGroups.forEach(g=>{
+          if(g.label&&youthGroups.length>1){
+            const lbl=document.createElement('div'); lbl.className='tray-gender-divider'; lbl.textContent=g.label; grid.appendChild(lbl);
+          }
+          const yInner=document.createElement('div'); yInner.className='tray-chip-grid-inner'; yInner.dataset.sgId='__youth__';
+          g.people.forEach(p=>yInner.appendChild(makeTrayChip(p)));
+          grid.appendChild(yInner);
+        });
       }
     } else {
       // Named group: gender sub-grouping
@@ -3373,29 +3419,44 @@ function renderPotentialCallings(){
   const inner=document.getElementById('tray-inner'); if(!inner) return;
   const existing=document.getElementById('pot-panel'); if(existing) existing.remove();
   if(!state.potentialCallings) state.potentialCallings=[];
+  if(!state._potHeight) state._potHeight=160;
 
   const panel=document.createElement('div');
   panel.id='pot-panel';
-  // Fixed height panel at the bottom — use height (not max-height) so offsetHeight works
-  if(!state._potHeight) state._potHeight=120;
-  panel.style.cssText=`flex-shrink:0;display:flex;flex-direction:column;border-top:2px solid var(--line-2);background:var(--surface);height:${state._potCollapsed?'auto':state._potHeight+'px'};overflow:hidden;`;
+  panel.style.cssText='flex-shrink:0;display:flex;flex-direction:column;border-top:2px solid var(--line-2);background:var(--surface);';
 
-  // ── Resize handle at top ──
+  // ── Resize handle (drag up/down to size the body) ──
   const resizeH=document.createElement('div');
-  resizeH.id='pot-resize-handle';
-  resizeH.style.cssText='height:8px;cursor:ns-resize;background:transparent;flex-shrink:0;display:flex;align-items:center;justify-content:center;';
-  resizeH.innerHTML='<div style="width:32px;height:2px;border-radius:1px;background:var(--line-2);pointer-events:none;"></div>';
+  resizeH.style.cssText='height:9px;cursor:ns-resize;background:var(--surface-2);flex-shrink:0;display:flex;align-items:center;justify-content:center;';
+  resizeH.innerHTML='<div style="width:34px;height:3px;border-radius:2px;background:var(--line-2);pointer-events:none;"></div>';
+  if(state._potCollapsed) resizeH.style.display='none';
+
+  // ── Header ──
+  const head=document.createElement('div');
+  head.className='tray-section-head';
+  head.style.cssText='flex-shrink:0;border-top:none;cursor:pointer;';
+  const chev=document.createElement('span'); chev.className='tray-section-chevron'; chev.textContent='\u25be';
+  if(state._potCollapsed) chev.style.transform='rotate(-90deg)';
+  const lbl=document.createElement('span'); lbl.className='sg-head-label'; lbl.textContent='Potential Callings';
+  const line=document.createElement('div'); line.className='sg-head-line';
+  const cnt=document.createElement('span');
+  cnt.style.cssText='font-size:10px;color:var(--ink-3);flex-shrink:0;font-variant-numeric:tabular-nums;';
+  cnt.textContent=state.potentialCallings.length;
+  head.append(chev, lbl, line, cnt);
+
+  // ── Body ──
+  const body=document.createElement('div');
+  body.style.cssText='overflow-y:auto;overflow-x:hidden;height:'+state._potHeight+'px;'+(state._potCollapsed?'display:none;':'');
+
+  // Resize handle drag — adjusts body height
   resizeH.addEventListener('mousedown',e=>{
-    if(state._potCollapsed) return;
     e.preventDefault();
     const startY=e.clientY;
-    const startH=panel.offsetHeight;
-    const innerH=inner.offsetHeight;
+    const startH=state._potHeight;
     const onMove=ev=>{
-      const delta=startY-ev.clientY; // dragging up = positive delta = bigger panel
-      const newH=Math.max(60, Math.min(innerH-120, startH+delta));
+      const newH=Math.max(60, Math.min(420, startH+(startY-ev.clientY)));
       state._potHeight=newH;
-      panel.style.height=newH+'px';
+      body.style.height=newH+'px';
     };
     const onUp=()=>{
       document.removeEventListener('mousemove',onMove);
@@ -3405,51 +3466,23 @@ function renderPotentialCallings(){
     document.addEventListener('mousemove',onMove);
     document.addEventListener('mouseup',onUp);
   });
-  panel.appendChild(resizeH);
 
-  // ── Header ──
-  const head=document.createElement('div');
-  head.className='tray-section-head';
-  head.style.cssText='flex-shrink:0;border-top:none;';
-  const chev=document.createElement('span');
-  chev.className='tray-section-chevron';
-  chev.textContent='▾';
-  if(state._potCollapsed) chev.style.transform='rotate(-90deg)';
-  const lbl=document.createElement('span'); lbl.className='sg-head-label'; lbl.textContent='Potential Callings';
-  const line=document.createElement('div'); line.className='sg-head-line';
-  const cnt=document.createElement('span');
-  cnt.style.cssText='font-size:10px;color:var(--ink-3);flex-shrink:0;font-variant-numeric:tabular-nums;';
-  cnt.textContent=state.potentialCallings.length;
-  head.append(chev, lbl, line, cnt);
   head.addEventListener('click',()=>{
     state._potCollapsed=!state._potCollapsed;
     if(state._potCollapsed){
-      panel.style.height='auto';
       body.style.display='none';
       resizeH.style.display='none';
       chev.style.transform='rotate(-90deg)';
     } else {
-      panel.style.height=state._potHeight+'px';
       body.style.display='';
+      body.style.height=state._potHeight+'px';
       resizeH.style.display='';
       chev.style.transform='';
     }
     scheduleSave();
   });
-  panel.appendChild(head);
 
-  panel.addEventListener('dragover',e=>{
-    if(!dragId) return;
-    const dragging=state.people.find(x=>x.id===dragId);
-    if(dragging&&dragging.vacant){ e.stopPropagation(); }
-  });
-  panel.addEventListener('drop',e=>{ e.stopPropagation(); });
-
-  // ── Body — scrollable, multi-column grid, full drop target ──
-  const body=document.createElement('div');
-  body.style.cssText='flex:1;overflow-y:auto;min-height:0;'+(state._potCollapsed?'display:none;':'');
-
-  // Drop zone for vacant callings - covers entire body
+  // Drop vacant callings into the panel body
   body.addEventListener('dragover',e=>{
     if(!dragId) return;
     const dragging=state.people.find(x=>x.id===dragId);
@@ -3463,9 +3496,8 @@ function renderPotentialCallings(){
     if(dragging&&dragging.vacant){
       snapshot();
       state.potentialCallings.push({id:mkid(), role:dragging.role, colId:dragging.colId, subgroupId:dragging.subgroupId});
-      // Remove the vacant from the org chart
       state.people=state.people.filter(x=>x.id!==dragging.id);
-      renderPotentialCallings(); buildLayout(); scheduleSave();
+      renderPotentialCallings(); buildLayout(); updateTrayColumns(); scheduleSave();
     }
   });
 
@@ -3475,15 +3507,14 @@ function renderPotentialCallings(){
     hint.textContent='Drag vacant callings here';
     body.appendChild(hint);
   } else {
-    // Same grid structure as tray chips so updateTrayColumns applies
+    // Same grid structure as No Calling chips so they get identical column sizing
     const gridOuter=document.createElement('div'); gridOuter.className='tray-chip-grid';
     const gridInner=document.createElement('div'); gridInner.className='tray-chip-grid-inner pot-chip-grid';
     gridOuter.appendChild(gridInner);
 
     state.potentialCallings.forEach(pc=>{
-      const orgCol=state.columns.find(c=>c.id===pc.colId);
       const chip=document.createElement('div');
-      chip.className='tray-chip gender-M'; // gender-M gives the consistent navy/blue left bar
+      chip.className='tray-chip gender-M';
       chip.draggable=true;
       chip.addEventListener('dragstart',e=>{
         potDragId=pc.id;
@@ -3492,7 +3523,6 @@ function renderPotentialCallings(){
         setTimeout(()=>chip.classList.add('dragging'),0);
       });
       chip.addEventListener('dragend',()=>{ potDragId=null; chip.classList.remove('dragging'); });
-
       const nameEl=document.createElement('div');
       nameEl.className='tray-chip-name';
       nameEl.textContent=pc.role||'Unnamed calling';
@@ -3506,30 +3536,22 @@ function renderPotentialCallings(){
       });
       nameEl.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); nameEl.blur(); } e.stopPropagation(); });
       chip.appendChild(nameEl);
-
-      const del=document.createElement('div');
+      const del=document.createElement('span');
       del.className='tray-chip-del';
-      del.textContent='×';
-      del.onclick=e=>{ e.stopPropagation(); snapshot(); state.potentialCallings=state.potentialCallings.filter(x=>x.id!==pc.id); renderPotentialCallings(); scheduleSave(); };
+      del.textContent='\u00d7';
+      del.onclick=e=>{ e.stopPropagation(); snapshot(); state.potentialCallings=state.potentialCallings.filter(x=>x.id!==pc.id); renderPotentialCallings(); updateTrayColumns(); scheduleSave(); };
       chip.appendChild(del);
-
       gridInner.appendChild(chip);
     });
-
     body.appendChild(gridOuter);
-    // Apply current column widths immediately
-    const pane=document.getElementById('tray-pane');
-    if(pane){
-      const w=pane.offsetWidth;
-      const cols=w>=400?3:w>=220?2:1;
-      const pct=(100/cols).toFixed(3)+'%';
-      gridInner.querySelectorAll('.tray-chip').forEach(c=>{ c.style.width=pct; c.style.boxSizing='border-box'; });
-    }
   }
 
+  panel.appendChild(resizeH);
+  panel.appendChild(head);
   panel.appendChild(body);
   inner.appendChild(panel);
 }
+
 
 function makeTrayDropZone(trayGroupId, beforePid){
   const zone=document.createElement('div');
@@ -3565,9 +3587,15 @@ function updateTrayColumns(){
   if(!pane||!trayOpen) return;
   const w=pane.offsetWidth;
   const cols=w>=400?3:w>=220?2:1;
-  const pct=(100/cols).toFixed(3)+'%';
   document.querySelectorAll('.tray-chip-grid-inner').forEach(inner=>{
-    inner.querySelectorAll('.tray-chip').forEach(c=>{ c.style.width=pct; c.style.boxSizing='border-box'; });
+    const chips=inner.querySelectorAll('.tray-chip');
+    if(!chips.length){ inner.style.height=''; return; }
+    // Each chip is a fixed-width column cell; flow them top-to-bottom then wrap.
+    chips.forEach(c=>{ c.style.width=(100/cols).toFixed(3)+'%'; c.style.boxSizing='border-box'; c.style.display='block'; });
+    // Measure one chip's height, set container height so flex-wrap breaks into `cols` columns.
+    const chipH=chips[0].offsetHeight||30;
+    const perCol=Math.ceil(chips.length/cols);
+    inner.style.height=(perCol*chipH)+'px';
   });
 }
 
@@ -3583,6 +3611,14 @@ function makeTrayChip(p){
   chip.addEventListener('dragstart',()=>onDragStart(p.id,chip));
   chip.addEventListener('dragend',()=>clearDrag(chip));
   chip.addEventListener('dblclick',e=>{ e.stopPropagation(); openPersonCard(p.id); });
+
+  // Search highlight
+  const q=((document.getElementById('tb-search')||{}).value||'').toLowerCase().trim();
+  if(q){
+    const match=(p.name||'').toLowerCase().includes(q)||(p.role||'').toLowerCase().includes(q);
+    chip.classList.add(match?'search-match':'search-dim');
+  }
+
   const name=document.createElement('div');
   name.className='tray-chip-name';
   name.textContent=p.name+(p.role?` · ${p.role}`:'');
@@ -3592,10 +3628,16 @@ function makeTrayChip(p){
 
 function toggleTray(){
   trayOpen=!trayOpen;
-  document.getElementById('tray-pane').classList.toggle('collapsed',!trayOpen);
+  const pane=document.getElementById('tray-pane');
+  pane.classList.toggle('collapsed',!trayOpen);
+  if(!trayOpen){
+    // Clear inline width so CSS collapsed class (44px) takes full effect
+    pane.style.width='';
+  }
   const btn=document.getElementById('tray-toggle-btn');
-  if(btn) btn.textContent='←';
+  if(btn) btn.textContent= trayOpen ? '←' : '→';
   const _fp=document.getElementById('filter-panel'); if(_fp) _fp.style.right=trayOpen?'295px':'48px';
+  if(trayOpen) requestAnimationFrame(updateTrayColumns);
 }
 
 // ── SUBGROUPS ────────────────────────────────────────────────────────────────
@@ -3653,34 +3695,34 @@ function openColSettings(colId){
   modal.innerHTML=`
     <h3>${col.name} — Settings</h3>
     <div class="cs-row"><label>Name</label><input type="text" id="cs-name" value="${col.name}"/></div>
-    <div class="cs-row" style="align-items:flex-start"><label style="padding-top:4px">Category</label><div style="flex:1"><div class="cs-cats" id="cs-cats"></div><div style="display:flex;gap:5px;margin-top:6px"><input type="text" id="cs-newcat" placeholder="New category…" style="flex:1;font-size:11px;padding:3px 7px"/><button onclick="addCategory()" style="font-size:10px;padding:3px 8px;border:1px solid var(--border-mid);border-radius:4px;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--text-primary)">+ Add</button></div></div></div>
+    <div class="cs-row"><label>Gender</label>
+      <div style="display:flex;gap:6px;flex:1;">
+        <button type="button" id="cs-og-any" data-val="" style="flex:1;padding:4px;border:1px solid var(--line-2);border-radius:5px;cursor:pointer;font-size:11px;background:${!col.orgGender?'var(--navy)':'var(--surface-2)'};color:${!col.orgGender?'#fff':'var(--ink-2)'};font-family:inherit;">All</button>
+        <button type="button" id="cs-og-m"   data-val="M" style="flex:1;padding:4px;border:1px solid var(--line-2);border-radius:5px;cursor:pointer;font-size:11px;background:${col.orgGender==='M'?'var(--navy)':'var(--surface-2)'};color:${col.orgGender==='M'?'#fff':'var(--ink-2)'};font-family:inherit;">Brothers</button>
+        <button type="button" id="cs-og-f"   data-val="F" style="flex:1;padding:4px;border:1px solid var(--line-2);border-radius:5px;cursor:pointer;font-size:11px;background:${col.orgGender==='F'?'var(--navy)':'var(--surface-2)'};color:${col.orgGender==='F'?'#fff':'var(--ink-2)'};font-family:inherit;">Sisters</button>
+      </div>
+    </div>
     <div class="cs-row" style="align-items:flex-start"><label style="padding-top:4px">Sub-groups</label><div style="flex:1"><div id="cs-subgroups" style="display:flex;flex-direction:column;gap:3px;margin-bottom:5px"></div><div style="display:flex;gap:5px"><input type="text" id="cs-newsg" placeholder="New sub-group…" style="flex:1;font-size:11px;padding:3px 7px"/><button onclick="addSubgroupFromModal('${colId}')" style="font-size:10px;padding:3px 8px;border:1px solid var(--border-mid);border-radius:4px;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--text-primary)">+ Add</button></div><div style="font-size:10px;color:var(--text-tertiary);margin-top:6px;">Drag a subgroup header onto another to stack them in the same column. Drag onto the body to reorder. Drag the right edge to widen a column.</div></div></div>
-    <div class="modal-btns" style="justify-content:space-between">
+    <div class="modal-btns" style="justify-content:space-between;flex-wrap:wrap;gap:6px">
       <button id="cs-delete-btn" onclick="deleteOrgFromSettings('${colId}')" style="color:#b03030;border-color:#e0b0b0;background:transparent">Delete Org</button>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="clearOrgToTray('${colId}')" style="font-size:11px;color:var(--ink-2);border-color:var(--line-2);" title="Move everyone in this org to No Calling">Clear Org →Tray</button>
         <button onclick="closeModal()">Cancel</button>
         <button class="primary" onclick="applyColSettings('${colId}')">Save</button>
       </div>
     </div>`;
 
-  function renderCatChips(){
-    const el=modal.querySelector('#cs-cats'); el.innerHTML='';
-    state.categories.forEach(cat=>{
-      const chip=document.createElement('div');
-      chip.className='cs-cat'+(cat===col.category?' selected':'');
-      chip.textContent=cat;
-      chip.onclick=()=>{ el.querySelectorAll('.cs-cat').forEach(c=>c.classList.remove('selected')); chip.classList.contains('selected')?chip.classList.remove('selected'):chip.classList.add('selected'); };
-      el.appendChild(chip);
+  // Wire gender toggle buttons
+  ['cs-og-any','cs-og-m','cs-og-f'].forEach(id=>{
+    const btn=modal.querySelector('#'+id); if(!btn) return;
+    btn.addEventListener('click',()=>{
+      ['cs-og-any','cs-og-m','cs-og-f'].forEach(b=>{ const el=modal.querySelector('#'+b); if(el){el.style.background='var(--surface-2)';el.style.color='var(--ink-2)';} });
+      btn.style.background='var(--navy)'; btn.style.color='#fff';
     });
-  }
-  renderCatChips();
+  });
 
-  modal.querySelector('#cs-newcat').addEventListener('keydown',e=>{ if(e.key==='Enter') addCategory(); });
-  window._addCategoryFn=()=>{
-    const inp=modal.querySelector('#cs-newcat'); const name=inp.value.trim();
-    if(!name||state.categories.includes(name)) return;
-    state.categories.push(name); inp.value=''; renderCatChips(); renderFilterPanel(); renderQuickCats();
-  };
+  function renderCatChips(){} // no-op — category UI removed
+  window._addCategoryFn=null;
 
   // If org has auto-detected subgroups (no manual ones yet), materialize them now
   // so the settings list shows something meaningful
@@ -3764,45 +3806,71 @@ function applyColSettings(colId){
   snapshot();
   const col=state.columns.find(c=>c.id===colId); if(!col) return;
   const nameEl=document.getElementById('cs-name'); if(nameEl) col.name=nameEl.value.trim()||col.name;
-  const sw=document.querySelector('.cs-swatch.selected'); if(sw) { /* color removed */ }
-  const cat=document.querySelector('.cs-cat.selected'); col.category=cat?cat.textContent:'';
+  // Save gender from toggle buttons
+  const ogBtn=document.querySelector('#cs-og-m, #cs-og-f, #cs-og-any');
+  ['cs-og-any','cs-og-m','cs-og-f'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el && el.style.background && el.style.background.includes('navy')){
+      col.orgGender = el.dataset.val || null;
+    }
+  });
   closeModal(); buildLayout(); renderFilterPanel(); renderQuickCats(); scheduleSave();
 }
 
-let _deleteOrgArmed=false;
-function deleteOrgFromSettings(colId){
-  const btn=document.getElementById('cs-delete-btn'); if(!btn) return;
-  if(!_deleteOrgArmed){
-    _deleteOrgArmed=true;
-    btn.textContent='Confirm delete?';
-    btn.style.cssText='background:#b03030;color:white;border-color:#b03030;font-weight:600;';
-    setTimeout(()=>{
-      _deleteOrgArmed=false;
-      if(btn.parentElement){ btn.textContent='Delete Org'; btn.style.cssText='color:#b03030;border-color:#e0b0b0;background:transparent;'; }
-    }, 3000);
-    return;
-  }
-  // Confirmed — move all people in this org to the tray, then remove the org
+function clearOrgToTray(colId, sgId){
+  // Move all non-vacant people in the org (or subgroup if sgId given) to No Calling tray.
+  // People with multiple callings (also serving elsewhere) are simply removed from
+  // this calling — they don't appear in the tray since they still have a calling.
+  const col=state.columns.find(c=>c.id===colId); if(!col) return;
+  const label=sgId?(col.subgroups.find(s=>s.id===sgId)||{}).name||'subgroup':col.name;
+  if(!confirm(`Move all filled callings in "${label}" to No Calling? Vacant slots stay. This cannot be undone easily.`)) return;
   snapshot();
-  const col=state.columns.find(c=>c.id===colId);
-  const orgName=col?col.name:'';
+  const now=new Date().toISOString().slice(0,7);
+  // Count callings per person name across all orgs
+  const callingCount={};
+  state.people.forEach(p=>{ if(!p.vacant&&p.colId!==TRAY) callingCount[p.name]=(callingCount[p.name]||0)+1; });
   state.people.forEach(p=>{
-    if(p.colId===colId){
-      // Save to history before moving
-      if(!p.vacant && p.role){
-        if(!p.history) p.history=[];
-        const now=new Date().toISOString().slice(0,7);
-        p.history.forEach(h=>{ if(h.current){ h.current=false; if(!h.endDate) h.endDate=now; } });
-        p.history.unshift({calling:p.role, org:orgName, startDate:p.startDate||null, endDate:now, current:false, years:calcTenure(p).toFixed(1)});
-      }
-      p.colId=TRAY; p.subgroupId=null; p.role=''; p.startDate=null; p.endDate=null;
+    if(p.vacant) return;
+    if(p.colId!==colId) return;
+    if(sgId && p.subgroupId!==sgId) return;
+    // Record history before moving
+    if(p.role){
+      if(!p.history) p.history=[];
+      p.history.unshift({calling:p.role,org:col.name,years:calcTenure(p).toFixed(1),current:false,startDate:p.startDate||null,endDate:now});
+    }
+    // Check if person has other callings
+    const otherCallings=callingCount[p.name]>1;
+    if(otherCallings){
+      // They still have other callings — just remove this one from the board
+      // Mark as vacant so the slot stays, but remove person link
+      p.vacant=true; p.name='VACANT';
+    } else {
+      // Move to tray
+      p.colId=TRAY; p.role=''; p.subgroupId=null; p.time=0; p.startDate=null; p.endDate=null; p.trayGroupId=null;
     }
   });
-  // Remove vacant rows (they belong to the org, not a person)
-  state.people=state.people.filter(p=>!(p.colId===TRAY&&p.vacant&&p.name==='VACANT'&&false)); // vacants already moved above with colId change
-  state.people=state.people.filter(p=>!p.vacant||p.colId!==TRAY); // remove any vacants that ended up in tray
+  closeModal(); rebuildAll(); scheduleSave();
+}
+
+function deleteOrgFromSettings(colId){
+  if(!confirm('Delete this org?\n\nFilled callings move to No Calling. Vacant slots are removed. This cannot be undone.')) return;
+  snapshot();
+  const col=state.columns.find(c=>c.id===colId); if(!col) return;
+  const orgName=col.name;
+  const now=new Date().toISOString().slice(0,7);
+  // Separate vacants (delete them) from filled (move to tray)
+  const toDelete=new Set(state.people.filter(p=>p.colId===colId&&p.vacant).map(p=>p.id));
+  state.people.forEach(p=>{
+    if(p.colId!==colId||p.vacant) return;
+    if(p.role){
+      if(!p.history) p.history=[];
+      p.history.forEach(h=>{ if(h.current){ h.current=false; if(!h.endDate) h.endDate=now; } });
+      p.history.unshift({calling:p.role,org:orgName,startDate:p.startDate||null,endDate:now,current:false,years:calcTenure(p).toFixed(1)});
+    }
+    p.colId=TRAY; p.subgroupId=null; p.role=''; p.startDate=null; p.endDate=null; p.trayGroupId=null;
+  });
+  state.people=state.people.filter(p=>!toDelete.has(p.id));
   state.columns=state.columns.filter(c=>c.id!==colId);
-  _deleteOrgArmed=false;
   closeModal(); buildLayout(); renderJumpNav(); renderTray(); renderFdOrgList(); scheduleSave();
 }
 
@@ -3942,16 +4010,22 @@ function openAddDialog(defaultTab){
       body.innerHTML=`
         <label>Org Name</label>
         <input id="add-org-name" type="text" placeholder="e.g. Activities Committee" />
-        <label>Category</label>
-        <select id="add-org-cat">
-          <option value="">— None —</option>
-          ${state.categories.map(c=>`<option value="${c}">${c}</option>`).join('')}
-          <option value="Adult">Adult</option>
-          <option value="Youth">Youth</option>
-          <option value="Stake">Stake</option>
-        </select>`;
+        <label>Gender</label>
+        <div style="display:flex;gap:6px;margin-bottom:4px;">
+          <button type="button" class="add-toggle" data-val="" id="add-og-any"  style="flex:1;padding:5px;border:1px solid var(--line-2);border-radius:5px;cursor:pointer;font-size:11px;background:var(--navy);color:#fff;font-family:inherit;">All</button>
+          <button type="button" class="add-toggle" data-val="M" id="add-og-m"   style="flex:1;padding:5px;border:1px solid var(--line-2);border-radius:5px;cursor:pointer;font-size:11px;background:var(--surface-2);color:var(--ink-2);font-family:inherit;">Brothers</button>
+          <button type="button" class="add-toggle" data-val="F" id="add-og-f"   style="flex:1;padding:5px;border:1px solid var(--line-2);border-radius:5px;cursor:pointer;font-size:11px;background:var(--surface-2);color:var(--ink-2);font-family:inherit;">Sisters</button>
+        </div>`;
       setTimeout(()=>{
         const ni=document.getElementById('add-org-name'); if(ni){ ni.focus(); ni.addEventListener('keydown',e=>{ if(e.key==='Enter') doAddOrg(overlay); }); }
+        // Wire gender toggle
+        ['add-og-any','add-og-m','add-og-f'].forEach(id=>{
+          const btn=document.getElementById(id); if(!btn) return;
+          btn.addEventListener('click',()=>{
+            ['add-og-any','add-og-m','add-og-f'].forEach(b=>{ const el=document.getElementById(b); if(el){el.style.background='var(--surface-2)';el.style.color='var(--ink-2)';} });
+            btn.style.background='var(--navy)'; btn.style.color='#fff';
+          });
+        });
       },0);
     }
   }
@@ -4010,10 +4084,14 @@ function doAddCalling(overlay){
 
 function doAddOrg(overlay){
   const name=(document.getElementById('add-org-name')||{}).value.trim(); if(!name) return;
-  const cat=(document.getElementById('add-org-cat')||{}).value||'';
+  const cat='';
+  const ogBtn=['add-og-m','add-og-f'].find(id=>{ const el=document.getElementById(id); return el&&el.style.background.includes('navy'); });
+  const orgGenderVal=ogBtn?document.getElementById(ogBtn).dataset.val:'';
   snapshot();
   const maxOrder=state.columns.length?Math.max(...state.columns.map(c=>c.order||0)):-1;
-  state.columns.push({id:mkid(),name,color:COLORS[state.columns.length%COLORS.length],order:maxOrder+2,subgroups:[],hidden:false,category:cat});
+  state.columns.push({id:mkid(),name,color:COLORS[state.columns.length%COLORS.length],order:maxOrder+2,
+    subgroups:[{id:mkid(),name:'General',slot:0,span:1,order:0,isGeneral:true}],
+    hidden:false,category:cat,orgGender:orgGenderVal});
   overlay.remove();
   buildLayout(); renderJumpNav(); scheduleSave();
 }
@@ -4404,7 +4482,7 @@ function openPersonCard(pid, showLinked){
   saveBtn.textContent='Save';
   saveBtn.onclick=()=>saveAndCloseCard(pid,true);
 
-  if(p.colId!==TRAY) footer.appendChild(delBtn);
+  footer.appendChild(delBtn);
   footer.append(cancelBtn, saveBtn);
   card.appendChild(footer);
 
@@ -4669,38 +4747,7 @@ async function saveToSheets(payload){
   }
 }
 
-// ── SANDBOX: disable all cloud sync ──────────────────────────────────────────
-// Override every sync entry point so the sandbox can never touch the cloud,
-// even if a URL is somehow present in localStorage.
-syncEnabled = false;
-function getSheetsUrl(){ return ''; }
-function saveToSheets(){ return Promise.resolve(false); }
-function forceSaveToSheets(){ alert('Cloud sync is disabled in the sandbox.'); }
-function loadLatestFromSheets(){ alert('Cloud sync is disabled in the sandbox.'); }
-function toggleSyncPanel(){ alert('Cloud sync is disabled in the sandbox.'); }
-function applySyncUrl(){ alert('Cloud sync is disabled in the sandbox.'); }
-
-function importFromLive(){
-  const LIVE_KEY='ward-org-chart-v1';
-  const raw=localStorage.getItem(LIVE_KEY);
-  if(!raw){
-    alert('No live data found in this browser.\n\nMake sure you open sandbox.html in the same browser where the live app runs, so they share localStorage.');
-    return;
-  }
-  if(!confirm('This will replace all sandbox data with the current live data.\n\nContinue?')) return;
-  try{
-    const parsed=JSON.parse(raw);
-    // Clear any savedAt so it doesn't trigger cloud sync logic
-    delete parsed.savedAt;
-    applyLoadedState(parsed);
-    saveLocal(statePayload());
-    backfillStartDates();
-    buildLayout(); renderTray();
-    setSaveStatus('Imported from live ✓');
-  }catch(e){
-    alert('Failed to import live data: '+e.message);
-  }
-}
+// Force a cloud save regardless of hash (for manual sync / testing)
 async function forceSaveToSheets(){
   const url=getSheetsUrl();
   if(!url){ alert('No Sheets URL configured — use ••• → Sync to Google Sheets to set it.'); return; }
@@ -4971,11 +5018,39 @@ function exportCSV(){
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download='ward_callings.csv'; a.click();
 }
 
+// ── SANDBOX: import live data ─────────────────────────────────────────────────
+function importFromLive(){
+  const LIVE_KEY='ward-org-chart-v1';
+  const raw=localStorage.getItem(LIVE_KEY);
+  if(!raw){
+    alert('No live data found in this browser.\n\nOpen sandbox.html in the same browser where the live app runs, so they share localStorage.');
+    return;
+  }
+  if(!confirm('This will replace all sandbox data with the current live data.\n\nContinue?')) return;
+  try{
+    const parsed=JSON.parse(raw);
+    delete parsed.savedAt;
+    applyLoadedState(parsed);
+    saveLocal(statePayload());
+    backfillStartDates(); migrateAllOrgs();
+    buildLayout(); renderTray(); renderJumpNav();
+    if(typeof renderPotentialCallings==='function') renderPotentialCallings();
+    setSaveStatus('Imported from live ✓');
+  }catch(e){
+    alert('Failed to import live data: '+e.message);
+  }
+}
+
 function exportJSON(){
   const payload=statePayload();
   const json=JSON.stringify(payload, null, 2);
-  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([json],{type:'application/json'})); a.download='ward_org_chart_backup.json'; a.click();
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([json],{type:'application/json'})); a.download='ward_org_chart_sandbox_backup.json'; a.click();
 }
+
+// SANDBOX: cloud backup disabled
+function saveCloudBackup(){ alert('Cloud backup is disabled in the sandbox.'); }
+function restoreCloudBackup(){ alert('Cloud backup is disabled in the sandbox.'); }
+function confirmRestoreCloudBackup(){}
 
 // ── IMPORT ────────────────────────────────────────────────────────────────────
 function importJSON(input){
@@ -5151,6 +5226,21 @@ if(syncEnabled){
     }
   });
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// SANDBOX SYNC LOCKOUT — defined last so these always override earlier defs.
+// The sandbox can never touch the cloud, even if a URL is in localStorage.
+// ════════════════════════════════════════════════════════════════════════════
+syncEnabled = false;
+window._SHEETS_URL_OVERRIDE = '';
+getSheetsUrl          = function(){ return ''; };
+saveToSheets          = function(){ return Promise.resolve(false); };
+forceSaveToSheets     = function(){ alert('Cloud sync is disabled in the sandbox.'); };
+loadLatestFromSheets  = function(){ alert('Cloud sync is disabled in the sandbox.'); };
+toggleSyncPanel       = function(){ alert('Cloud sync is disabled in the sandbox.'); };
+applySyncUrl          = function(){ alert('Cloud sync is disabled in the sandbox.'); };
+saveCloudBackup       = function(){ alert('Cloud backup is disabled in the sandbox.'); };
+restoreCloudBackup    = function(){ alert('Cloud backup is disabled in the sandbox.'); };
 </script>
 </body>
 </html>
