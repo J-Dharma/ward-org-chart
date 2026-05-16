@@ -3413,9 +3413,10 @@ function renderPotentialCallings(){
 
   const panel=document.createElement('div');
   panel.id='pot-panel';
-  // Fixed height panel at the bottom — use height (not max-height) so offsetHeight works
   if(!state._potHeight) state._potHeight=120;
-  panel.style.cssText=`flex-shrink:0;position:relative;z-index:2;display:flex;flex-direction:column;border-top:2px solid var(--line-2);background:var(--surface);height:${state._potCollapsed?'auto':state._potHeight+'px'};overflow:hidden;`;
+  // Panel uses natural height (header + body) — no fixed height on the container.
+  // Only the scrollable body gets a max-height, controlled by the resize handle.
+  panel.style.cssText='flex-shrink:0;position:relative;z-index:2;display:flex;flex-direction:column;border-top:2px solid var(--line-2);background:var(--surface);';
 
   // ── Resize handle at top ──
   const resizeH=document.createElement('div');
@@ -3426,13 +3427,12 @@ function renderPotentialCallings(){
     if(state._potCollapsed) return;
     e.preventDefault();
     const startY=e.clientY;
-    const startH=panel.offsetHeight;
-    const innerH=inner.offsetHeight;
+    const startH=state._potHeight;
     const onMove=ev=>{
-      const delta=startY-ev.clientY; // dragging up = positive delta = bigger panel
-      const newH=Math.max(60, Math.min(innerH-120, startH+delta));
+      const delta=startY-ev.clientY; // drag up = bigger
+      const newH=Math.max(60, Math.min(400, startH+delta));
       state._potHeight=newH;
-      panel.style.height=newH+'px';
+      body.style.maxHeight=newH+'px';
     };
     const onUp=()=>{
       document.removeEventListener('mousemove',onMove);
@@ -3461,13 +3461,12 @@ function renderPotentialCallings(){
   head.addEventListener('click',()=>{
     state._potCollapsed=!state._potCollapsed;
     if(state._potCollapsed){
-      panel.style.height='auto';
       body.style.display='none';
       resizeH.style.display='none';
       chev.style.transform='rotate(-90deg)';
     } else {
-      panel.style.height=state._potHeight+'px';
       body.style.display='';
+      body.style.maxHeight=state._potHeight+'px';
       resizeH.style.display='';
       chev.style.transform='';
     }
@@ -3484,7 +3483,7 @@ function renderPotentialCallings(){
 
   // ── Body — scrollable, multi-column grid, full drop target ──
   const body=document.createElement('div');
-  body.style.cssText='flex:1;overflow-y:auto;min-height:0;'+(state._potCollapsed?'display:none;':'');
+  body.style.cssText=`overflow-y:auto;min-height:0;max-height:${state._potHeight}px;`+(state._potCollapsed?'display:none;':'');
 
   // Drop zone for vacant callings - covers entire body
   body.addEventListener('dragover',e=>{
