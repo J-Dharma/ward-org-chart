@@ -4620,26 +4620,18 @@ async function saveToSheets(payload){
     const total=chunks.length;
     const saveId=Date.now();
 
-    // Send all chunks in parallel
-    const chunkPromises = chunks.map((chunk, i) =>
-      fetch(`${url}?action=chunk&id=${saveId}&i=${i}&total=${total}&d=${chunk}`)
-        .then(r => r.json())
-    );
-    const results = await Promise.all(chunkPromises);
-    const failed = results.find(r => !r.ok);
-    if(failed) throw new Error(failed.error || 'A chunk failed');
-
-    const assembled = results.find(r => r.assembled);
-    if(assembled){
-      const now=new Date();
-      setSaveStatus(`☁ Saved ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`);
-    } else {
-      // Assembly happens on last chunk - give it a moment
-      setTimeout(async()=>{
-        const now=new Date();
-        setSaveStatus(`☁ Saved ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`);
-      }, 500);
+    // Send chunks SEQUENTIALLY so they arrive in order (parallel sends can
+    // scramble chunk order on the Apps Script side, corrupting the data).
+    let assembledFlag=false;
+    for(let i=0;i<chunks.length;i++){
+      const r=await fetch(`${url}?action=chunk&id=${saveId}&i=${i}&total=${total}&d=${encodeURIComponent(chunks[i])}`)
+        .then(r=>r.json());
+      if(!r.ok) throw new Error(r.error || 'A chunk failed at index '+i);
+      if(r.assembled) assembledFlag=true;
     }
+
+    const now=new Date();
+    setSaveStatus(`☁ Saved ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`);
     return true;
   } catch(err){
     console.warn('Sheets save failed:',err);
@@ -4679,23 +4671,60 @@ async function loadFromSheets(){
   try{
     const resp=await fetch(url+'?action=load');
     const result=await resp.json();
-    console.log('Cloud load result:', JSON.stringify({ok:result.ok, hasData:!!result.data, hasCompressed:!!result.compressed, compressedLen:result.compressed?result.compressed.length:0, error:result.error}));
-    if(result.ok && result.data && result.data.columns) return result.data;
-    // Handle compressed string (from older LZString saves)
-    if(result.ok && result.compressed){
-      try{
-        // Try LZString if available
-        if(typeof LZString!=='undefined'){
-          const d=LZString.decompressFromEncodedURIComponent(result.compressed);
-          if(d) return JSON.parse(d);
+    console.log('Cloud load result:', JSON.stringify({ok:result.ok, hasData:!!result.data, dataType:typeof result.data, hasCompressed:!!result.compressed, compressedLen:result.compressed?String(result.compressed).length:0, error:result.error}));
+
+    // Helper: turn whatever we got into a usable state object
+    function coerce(val){
+      if(!val) return null;
+      // Already a parsed object with state
+      if(typeof val==='object' && val.columns && val.people) return val;
+      if(typeof val!=='string') return null;
+      const raw=val.trim();
+      if(!raw) return null;
+
+      // Build candidate strings: as-is, and with spaces repaired back to '+'
+      const candidates=[raw];
+      if(raw.indexOf(' ')>=0) candidates.push(raw.replace(/ /g,'+'));
+
+      function tryParse(str){
+        if(!str) return null;
+        try{ const o=JSON.parse(str); if(o&&o.columns&&o.people) return o; }catch(e){}
+        return null;
+      }
+
+      for(const s of candidates){
+        // 1. Plain JSON
+        const j=tryParse(s);
+        if(j) return j;
+        if(typeof LZString==='undefined') continue;
+        // 2. Every LZString decompression variant
+        const methods=[
+          'decompressFromEncodedURIComponent',
+          'decompressFromBase64',
+          'decompressFromUTF16',
+          'decompress'
+        ];
+        for(const m of methods){
+          try{
+            const d=LZString[m](s);
+            const o=tryParse(d);
+            if(o) return o;
+            // double-compressed? try decompressing the result again
+            if(d && d!==s){
+              for(const m2 of methods){
+                try{ const o2=tryParse(LZString[m2](d)); if(o2) return o2; }catch(e){}
+              }
+            }
+          }catch(e){}
         }
-        // Maybe it's raw JSON stored as a string
-        return JSON.parse(result.compressed);
-      } catch(e){ console.warn('Decompress failed:', e); }
+      }
+      console.warn('coerce: could not decode string of length', raw.length, '— starts with:', raw.slice(0,40));
+      return null;
     }
-    // Handle case where data came back as a string instead of parsed object
-    if(result.ok && result.data && typeof result.data==='string'){
-      try{ return JSON.parse(result.data); } catch(e){}
+
+    if(result.ok){
+      let out=coerce(result.data) || coerce(result.compressed) || coerce(result.value) || coerce(result.a1);
+      if(out) return out;
     }
     console.warn('Cloud load: no usable data in response', result);
     return null;
