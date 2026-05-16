@@ -1137,6 +1137,7 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
       <div id="overflow-dropdown">
         <div class="fd-section" style="padding:4px 0;">
           <button class="overflow-item" onclick="toggleOverflowMenu();setTimeout(toggleSyncPanel,10)">☁ Sync to Google Sheets</button>
+          <button class="overflow-item" onclick="toggleOverflowMenu();window.open('sandbox.html','_blank')" style="color:#b45309;">🧪 Open Sandbox</button>
           <div style="height:1px;background:var(--line);margin:4px 0;"></div>
           <button class="overflow-item" onclick="exportJSON();toggleOverflowMenu()">↓ Backup (JSON)</button>
           <button class="overflow-item" onclick="document.getElementById('json-import').click();toggleOverflowMenu()">↑ Restore backup (JSON)</button>
