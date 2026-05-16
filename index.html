@@ -4721,13 +4721,27 @@ async function loadFromSheets(){
 
       // NEW FORMAT: hex-encoded LZString.compress output.
       // Detect: only hex chars, length divisible by 4.
-      if(/^[0-9a-fA-F]+$/.test(raw) && raw.length%4===0){
+      const isHex=/^[0-9a-fA-F]+$/.test(raw);
+      console.log(`coerce: raw len=${raw.length}, isHex=${isHex}, len%4=${raw.length%4}, first40=${raw.slice(0,40)}, last20=${raw.slice(-20)}`);
+      if(isHex && raw.length%4===0){
         try{
           const compressed=hexToStr(raw);
+          console.log(`coerce: hexToStr → ${compressed.length} chars`);
           const d=LZString.decompress(compressed);
+          console.log(`coerce: decompress → ${d?d.length:'null'} chars, starts: ${d?d.slice(0,60):'(null)'}`);
           const o=tryParse(d);
-          if(o){ console.log('coerce: decoded via hex+LZString.decompress'); return o; }
-        }catch(e){ console.warn('hex decode failed:',e); }
+          if(o){ console.log('coerce: decoded via hex+LZString.decompress ✓'); return o; }
+          else console.warn('coerce: hex decoded but JSON.parse failed or missing columns/people');
+        }catch(e){ console.warn('hex decode threw:',e.message); }
+      } else if(isHex && raw.length%4!==0){
+        console.warn(`coerce: looks like hex but length ${raw.length} not divisible by 4 — data may be truncated`);
+        // Try anyway, trimming to a multiple of 4
+        try{
+          const trimmed=raw.slice(0, raw.length - (raw.length%4));
+          const d=LZString.decompress(hexToStr(trimmed));
+          const o=tryParse(d);
+          if(o){ console.log('coerce: decoded via hex (length-trimmed)'); return o; }
+        }catch(e){}
       }
 
       // LEGACY FORMATS: try every LZString variant, with space-repair candidates.
