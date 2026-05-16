@@ -4707,6 +4707,7 @@ async function loadFromSheets(){
         for(const m of methods){
           try{
             const d=LZString[m](s);
+            if(d) console.log(`coerce: ${m} → ${d.length} chars, starts: ${d.slice(0,60)}`);
             const o=tryParse(d);
             if(o) return o;
             // double-compressed? try decompressing the result again
