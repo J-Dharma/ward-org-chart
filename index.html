@@ -4632,7 +4632,9 @@ async function saveToSheets(payload){
     const compressed=LZString.compress(json);
     // Hex-encode so the data survives transport with zero corruption.
     const hex=strToHex(compressed);
-    console.log(`saveToSheets: ${hex.length} hex chars (${compressed.length} compressed)`);
+    // Simple checksum to detect transit corruption.
+    let _ck=0; for(let i=0;i<hex.length;i++) _ck=(_ck*31+hex.charCodeAt(i))>>>0;
+    console.log(`saveToSheets: ${hex.length} hex chars (${compressed.length} compressed), checksum=${_ck}, head=${hex.slice(0,24)}, tail=${hex.slice(-24)}`);
 
     // POST the whole payload in the request body. Using Content-Type
     // text/plain makes this a CORS "simple request" — no preflight, and
@@ -4655,7 +4657,8 @@ async function saveToSheets(payload){
     }
     console.log('Save response:', JSON.stringify(r));
     if(!r.ok) throw new Error(r.error || 'Apps Script rejected the save');
-    console.log(`Cloud save OK — wrote ${r.length} chars across ${r.cells} cell(s)`);
+    if(r.verified) console.log(`Cloud save OK & VERIFIED — ${r.length} chars across ${r.cells} cell(s)`);
+    else console.warn(`Cloud save reported OK but no write-verify flag — Apps Script may be an older version`);
 
     const now=new Date();
     setSaveStatus(`☁ Saved ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`);
@@ -4724,6 +4727,8 @@ async function loadFromSheets(){
       const isHex=/^[0-9a-fA-F]+$/.test(raw);
       console.log(`coerce: raw len=${raw.length}, isHex=${isHex}, len%4=${raw.length%4}, first40=${raw.slice(0,40)}, last20=${raw.slice(-20)}`);
       if(isHex && raw.length%4===0){
+        let _ck=0; for(let i=0;i<raw.length;i++) _ck=(_ck*31+raw.charCodeAt(i))>>>0;
+        console.log(`coerce: hex checksum=${_ck}, head=${raw.slice(0,24)}, tail=${raw.slice(-24)}`);
         try{
           const compressed=hexToStr(raw);
           console.log(`coerce: hexToStr → ${compressed.length} chars`);
