@@ -597,6 +597,8 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
 .person-row.dragging { opacity: 0.35; }
 .person-row.search-match { background: rgba(255,220,120,0.3) !important; }
 .person-row.search-dim { opacity: 0.25; }
+.tray-chip.search-match { background: rgba(255,220,120,0.45) !important; }
+.tray-chip.search-dim   { opacity: 0.25; }
 
 /* Gender left-bar */
 .person-row.gender-M { border-left-color: #1473b5; }
@@ -703,7 +705,7 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
 /* ── TRAY ── */
 #tray-pane {
   flex-shrink: 0; width: 396px;
-  min-width: 120px; max-width: 600px;
+  min-width: 180px; max-width: 600px;
   background: var(--surface);
   border-left: 1px solid var(--line);
   display: flex; flex-direction: column;
@@ -742,7 +744,8 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
 #tray-head {
   padding: 10px 12px 9px;
   border-bottom: 2px solid var(--accent);
-  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+  flex-wrap: wrap;
   background: var(--navy);
   position: relative;
 }
@@ -785,7 +788,10 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
 .tray-section.collapsed .tray-chip-grid { display:none; }
 .tray-section.collapsed .tray-section-drop { display:none; }
 .tray-chip-grid { }
-.tray-chip-grid-inner { display: flex; flex-wrap: wrap; align-content: start; }
+.tray-chip-grid-inner {
+  column-fill: balance;
+  /* column-count set dynamically by updateTrayColumns */
+}
 .tray-chip {
   display:flex; align-items:center; gap:4px; padding:6px 12px 6px 10px;
   cursor:grab; border-bottom:1px solid var(--line);
@@ -1139,8 +1145,10 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
           <button class="overflow-item" onclick="toggleOverflowMenu();setTimeout(toggleSyncPanel,10)">☁ Sync to Google Sheets</button>
           <button class="overflow-item" onclick="toggleOverflowMenu();window.open('sandbox.html','_blank')" style="color:#b45309;">🧪 Open Sandbox</button>
           <div style="height:1px;background:var(--line);margin:4px 0;"></div>
-          <button class="overflow-item" onclick="exportJSON();toggleOverflowMenu()">↓ Backup (JSON)</button>
-          <button class="overflow-item" onclick="document.getElementById('json-import').click();toggleOverflowMenu()">↑ Restore backup (JSON)</button>
+          <button class="overflow-item" onclick="exportJSON();toggleOverflowMenu()">↓ Backup (JSON) — local download</button>
+          <button class="overflow-item" onclick="document.getElementById('json-import').click();toggleOverflowMenu()">↑ Restore backup (JSON) — local file</button>
+          <button class="overflow-item" onclick="saveCloudBackup();toggleOverflowMenu()" style="color:var(--accent);">☁ Save cloud backup snapshot</button>
+          <button class="overflow-item" onclick="restoreCloudBackup();toggleOverflowMenu()" style="color:var(--accent);">☁ Restore from cloud backup</button>
           <input type="file" id="json-import" accept=".json" style="display:none" onchange="importJSON(this)" />
           <div style="height:1px;background:var(--line);margin:4px 0;"></div>
           <button class="overflow-item" onclick="exportCSV();toggleOverflowMenu()">↓ Export CSV (callings list)</button>
@@ -1739,14 +1747,9 @@ const genderMap={};
 noCalling.forEach(p=>{ genderMap[p.name.toLowerCase()]=p.gender; });
 
 // Orgs that are exclusively one gender
-const MALE_ORGS=['Bishopric','Elders Quorum','Young Men'];
-const FEMALE_ORGS=['Relief Society','Young Women'];
-
 function orgGender(col){
   if(!col) return null;
   if(col.orgGender) return col.orgGender;
-  if(MALE_ORGS.some(o=>col.name.includes(o))) return 'M';
-  if(FEMALE_ORGS.some(o=>col.name.includes(o))) return 'F';
   return null;
 }
 function inferGender(person){ return person.gender||null; }
@@ -1873,6 +1876,24 @@ function toggleAutoSg(on){
 
 // Run migration on all orgs. Idempotent — safe to call multiple times.
 function migrateAllOrgs(){
+  // Migrate user-created "Youth" tray groups to __youth__ built-in
+  if(state.trayGroups){
+    const youthTg=state.trayGroups.find(g=>g.name==='Youth');
+    if(youthTg){
+      state.people.forEach(p=>{ if(p.trayGroupId===youthTg.id) p.trayGroupId='__youth__'; });
+      state.trayGroups=state.trayGroups.filter(g=>g.id!==youthTg.id);
+    }
+  }
+  // Also backfill any youth people with null trayGroupId
+  state.people.forEach(p=>{ if(p.colId===TRAY&&p.ageGroup==='Youth'&&!p.trayGroupId) p.trayGroupId='__youth__'; });
+  const OLD_MALE   = ['Bishopric','Elders Quorum','Young Men'];
+  const OLD_FEMALE = ['Relief Society','Young Women'];
+  state.columns.forEach(col=>{
+    if(!col.orgGender){
+      if(OLD_MALE.some(o=>col.name.includes(o)))   col.orgGender='M';
+      if(OLD_FEMALE.some(o=>col.name.includes(o))) col.orgGender='F';
+    }
+  });
   state.columns.forEach(col=>{
     // Normalize slot/span/order on existing subgroups (fill in missing fields)
     col.subgroups.forEach((sg,i)=>{
@@ -2981,32 +3002,48 @@ function dropToTray(trayGroupId){
   snapshot();
   const p=state.people.find(x=>x.id===dragId);
   if(!p){ dragId=null; return; }
+
   if(p.colId!==TRAY && !p.vacant){
+    const col=state.columns.find(c=>c.id===p.colId);
+    const now=new Date().toISOString().slice(0,7);
+
+    // Record history before removing from this calling
     if(p.role){
-      const peers=state.people.filter(x=>x.colId===p.colId);
-      const srcPeer=peers[dragSrcIdx]||null;
-      const ins=srcPeer?state.people.indexOf(srcPeer):state.people.length;
-      state.people.splice(ins,0,{id:mkid(),name:'VACANT',role:p.role,colId:p.colId,subgroupId:p.subgroupId,time:0,vacant:true});
-      const col=state.columns.find(c=>c.id===p.colId);
-      const now=new Date().toISOString().slice(0,7);
       if(!p.history) p.history=[];
-      // Close current entry
       p.history.forEach(h=>{ if(h.current){ h.current=false; if(!h.endDate) h.endDate=now; h.years=calcTenure(p).toFixed(1); } });
-      // Add a closed entry if no matching one exists yet
       const alreadyRecorded=p.history.some(h=>h.calling===p.role&&(h.org||'')===(col?col.name:'')&&!h.current&&h.endDate===now);
       if(!alreadyRecorded){
         p.history.unshift({calling:p.role, org:col?col.name:'', years:calcTenure(p).toFixed(1), current:false, startDate:p.startDate||null, endDate:now});
       }
+
+      // Check if this person has OTHER callings (multi-calling)
+      const otherCallings=state.people.filter(x=>x.id!==p.id&&!x.vacant&&x.colId!==TRAY&&x.name===p.name);
+      if(otherCallings.length>0){
+        // They still have callings elsewhere — just leave a VACANT here, don't add to tray
+        const peers=state.people.filter(x=>x.colId===p.colId);
+        const srcPeer=peers[dragSrcIdx]||null;
+        const ins=srcPeer?state.people.indexOf(srcPeer):state.people.length;
+        state.people.splice(ins,0,{id:mkid(),name:'VACANT',role:p.role,colId:p.colId,subgroupId:p.subgroupId,time:0,vacant:true});
+        // Remove this calling instance entirely
+        const idx=state.people.findIndex(x=>x.id===p.id);
+        if(idx>=0) state.people.splice(idx,1);
+        dragId=null;
+        rebuildAll(); scheduleSave(); return;
+      }
+
+      // Single calling — leave VACANT, move person to tray
+      const peers=state.people.filter(x=>x.colId===p.colId);
+      const srcPeer=peers[dragSrcIdx]||null;
+      const ins=srcPeer?state.people.indexOf(srcPeer):state.people.length;
+      state.people.splice(ins,0,{id:mkid(),name:'VACANT',role:p.role,colId:p.colId,subgroupId:p.subgroupId,time:0,vacant:true});
     }
   }
+
   p.colId=TRAY; p.role=''; p.subgroupId=null; p.time=0; p.startDate=null; p.endDate=null;
 
-  // Youth auto-route to Youth tray group
+  // Youth auto-route to built-in Youth system group
   if(p.ageGroup==='Youth'){
-    if(!state.trayGroups) state.trayGroups=[];
-    let youthGroup=state.trayGroups.find(g=>g.name==='Youth');
-    if(!youthGroup){ youthGroup={id:mkid(), name:'Youth'}; state.trayGroups.push(youthGroup); }
-    p.trayGroupId=youthGroup.id;
+    p.trayGroupId='__youth__';
   } else {
     p.trayGroupId=trayGroupId||null;
   }
@@ -3215,7 +3252,7 @@ function renderTray(){
   }
 
   const sections=[
-    ...(showUngrouped?[{id:null, name:'', people:allPeople.filter(p=>!p.trayGroupId&&p.ageGroup!=='Youth'), isUngrouped:true}]:[]),
+    ...(showUngrouped?[{id:null, name:'', people:allPeople.filter(p=>!p.trayGroupId&&p.trayGroupId!=='__youth__'&&p.ageGroup!=='Youth'), isUngrouped:true}]:[]),
     ...(state.trayGroups||[])
       .filter(tg=>showAll||trayGroupFilter.has(tg.id))
       .map((tg)=>({id:tg.id, name:tg.name, tg, tgi:state.trayGroups.indexOf(tg),
@@ -3305,7 +3342,7 @@ function renderTray(){
     // Build chip grid with gender sub-grouping
     if(sec.isUngrouped){
       // Free Agents: also show Youth sub-section
-      const youthPeople=allPeople.filter(p=>!p.trayGroupId&&p.ageGroup==='Youth').sort(traySort);
+      const youthPeople=allPeople.filter(p=>p.trayGroupId==='__youth__'||(!p.trayGroupId&&p.ageGroup==='Youth')).sort(traySort);
       const adultGroups=genderSplit(sec.people);
 
       adultGroups.forEach(g=>{
@@ -3557,9 +3594,11 @@ function updateTrayColumns(){
   if(!pane||!trayOpen) return;
   const w=pane.offsetWidth;
   const cols=w>=400?3:w>=220?2:1;
-  const pct=(100/cols).toFixed(3)+'%';
   document.querySelectorAll('.tray-chip-grid-inner').forEach(inner=>{
-    inner.querySelectorAll('.tray-chip').forEach(c=>{ c.style.width=pct; c.style.boxSizing='border-box'; });
+    inner.style.columnCount=cols;
+    inner.style.columnGap='0';
+    // Reset any old per-chip width styles
+    inner.querySelectorAll('.tray-chip').forEach(c=>{ c.style.width='100%'; c.style.boxSizing='border-box'; c.style.display='block'; });
   });
 }
 
@@ -3575,6 +3614,14 @@ function makeTrayChip(p){
   chip.addEventListener('dragstart',()=>onDragStart(p.id,chip));
   chip.addEventListener('dragend',()=>clearDrag(chip));
   chip.addEventListener('dblclick',e=>{ e.stopPropagation(); openPersonCard(p.id); });
+
+  // Search highlight
+  const q=((document.getElementById('tb-search')||{}).value||'').toLowerCase().trim();
+  if(q){
+    const match=(p.name||'').toLowerCase().includes(q)||(p.role||'').toLowerCase().includes(q);
+    chip.classList.add(match?'search-match':'search-dim');
+  }
+
   const name=document.createElement('div');
   name.className='tray-chip-name';
   name.textContent=p.name+(p.role?` · ${p.role}`:'');
@@ -3584,10 +3631,16 @@ function makeTrayChip(p){
 
 function toggleTray(){
   trayOpen=!trayOpen;
-  document.getElementById('tray-pane').classList.toggle('collapsed',!trayOpen);
+  const pane=document.getElementById('tray-pane');
+  pane.classList.toggle('collapsed',!trayOpen);
+  if(!trayOpen){
+    // Clear inline width so CSS collapsed class (44px) takes full effect
+    pane.style.width='';
+  }
   const btn=document.getElementById('tray-toggle-btn');
-  if(btn) btn.textContent='←';
+  if(btn) btn.textContent= trayOpen ? '←' : '→';
   const _fp=document.getElementById('filter-panel'); if(_fp) _fp.style.right=trayOpen?'295px':'48px';
+  if(trayOpen) requestAnimationFrame(updateTrayColumns);
 }
 
 // ── SUBGROUPS ────────────────────────────────────────────────────────────────
@@ -3645,27 +3698,33 @@ function openColSettings(colId){
   modal.innerHTML=`
     <h3>${col.name} — Settings</h3>
     <div class="cs-row"><label>Name</label><input type="text" id="cs-name" value="${col.name}"/></div>
-    <div class="cs-row" style="align-items:flex-start"><label style="padding-top:4px">Category</label><div style="flex:1"><div class="cs-cats" id="cs-cats"></div><div style="display:flex;gap:5px;margin-top:6px"><input type="text" id="cs-newcat" placeholder="New category…" style="flex:1;font-size:11px;padding:3px 7px"/><button onclick="addCategory()" style="font-size:10px;padding:3px 8px;border:1px solid var(--border-mid);border-radius:4px;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--text-primary)">+ Add</button></div></div></div>
+    <div class="cs-row"><label>Gender</label>
+      <div style="display:flex;gap:6px;flex:1;">
+        <button type="button" id="cs-og-any" data-val="" style="flex:1;padding:4px;border:1px solid var(--line-2);border-radius:5px;cursor:pointer;font-size:11px;background:${!col.orgGender?'var(--navy)':'var(--surface-2)'};color:${!col.orgGender?'#fff':'var(--ink-2)'};font-family:inherit;">All</button>
+        <button type="button" id="cs-og-m"   data-val="M" style="flex:1;padding:4px;border:1px solid var(--line-2);border-radius:5px;cursor:pointer;font-size:11px;background:${col.orgGender==='M'?'var(--navy)':'var(--surface-2)'};color:${col.orgGender==='M'?'#fff':'var(--ink-2)'};font-family:inherit;">Brothers</button>
+        <button type="button" id="cs-og-f"   data-val="F" style="flex:1;padding:4px;border:1px solid var(--line-2);border-radius:5px;cursor:pointer;font-size:11px;background:${col.orgGender==='F'?'var(--navy)':'var(--surface-2)'};color:${col.orgGender==='F'?'#fff':'var(--ink-2)'};font-family:inherit;">Sisters</button>
+      </div>
+    </div>
     <div class="cs-row" style="align-items:flex-start"><label style="padding-top:4px">Sub-groups</label><div style="flex:1"><div id="cs-subgroups" style="display:flex;flex-direction:column;gap:3px;margin-bottom:5px"></div><div style="display:flex;gap:5px"><input type="text" id="cs-newsg" placeholder="New sub-group…" style="flex:1;font-size:11px;padding:3px 7px"/><button onclick="addSubgroupFromModal('${colId}')" style="font-size:10px;padding:3px 8px;border:1px solid var(--border-mid);border-radius:4px;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--text-primary)">+ Add</button></div><div style="font-size:10px;color:var(--text-tertiary);margin-top:6px;">Drag a subgroup header onto another to stack them in the same column. Drag onto the body to reorder. Drag the right edge to widen a column.</div></div></div>
-    <div class="modal-btns" style="justify-content:space-between">
+    <div class="modal-btns" style="justify-content:space-between;flex-wrap:wrap;gap:6px">
       <button id="cs-delete-btn" onclick="deleteOrgFromSettings('${colId}')" style="color:#b03030;border-color:#e0b0b0;background:transparent">Delete Org</button>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="clearOrgToTray('${colId}')" style="font-size:11px;color:var(--ink-2);border-color:var(--line-2);" title="Move everyone in this org to No Calling">Clear Org →Tray</button>
         <button onclick="closeModal()">Cancel</button>
         <button class="primary" onclick="applyColSettings('${colId}')">Save</button>
       </div>
     </div>`;
 
-  function renderCatChips(){
-    const el=modal.querySelector('#cs-cats'); el.innerHTML='';
-    state.categories.forEach(cat=>{
-      const chip=document.createElement('div');
-      chip.className='cs-cat'+(cat===col.category?' selected':'');
-      chip.textContent=cat;
-      chip.onclick=()=>{ el.querySelectorAll('.cs-cat').forEach(c=>c.classList.remove('selected')); chip.classList.contains('selected')?chip.classList.remove('selected'):chip.classList.add('selected'); };
-      el.appendChild(chip);
+  // Wire gender toggle buttons
+  ['cs-og-any','cs-og-m','cs-og-f'].forEach(id=>{
+    const btn=modal.querySelector('#'+id); if(!btn) return;
+    btn.addEventListener('click',()=>{
+      ['cs-og-any','cs-og-m','cs-og-f'].forEach(b=>{ const el=modal.querySelector('#'+b); if(el){el.style.background='var(--surface-2)';el.style.color='var(--ink-2)';} });
+      btn.style.background='var(--navy)'; btn.style.color='#fff';
     });
-  }
-  renderCatChips();
+  });
+
+  function renderCatChips(){} // no-op — category UI removed
 
   modal.querySelector('#cs-newcat').addEventListener('keydown',e=>{ if(e.key==='Enter') addCategory(); });
   window._addCategoryFn=()=>{
@@ -3756,12 +3815,52 @@ function applyColSettings(colId){
   snapshot();
   const col=state.columns.find(c=>c.id===colId); if(!col) return;
   const nameEl=document.getElementById('cs-name'); if(nameEl) col.name=nameEl.value.trim()||col.name;
-  const sw=document.querySelector('.cs-swatch.selected'); if(sw) { /* color removed */ }
-  const cat=document.querySelector('.cs-cat.selected'); col.category=cat?cat.textContent:'';
+  // Save gender from toggle buttons
+  const ogBtn=document.querySelector('#cs-og-m, #cs-og-f, #cs-og-any');
+  ['cs-og-any','cs-og-m','cs-og-f'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el && el.style.background && el.style.background.includes('navy')){
+      col.orgGender = el.dataset.val || null;
+    }
+  });
   closeModal(); buildLayout(); renderFilterPanel(); renderQuickCats(); scheduleSave();
 }
 
-let _deleteOrgArmed=false;
+function clearOrgToTray(colId, sgId){
+  // Move all non-vacant people in the org (or subgroup if sgId given) to No Calling tray.
+  // People with multiple callings (also serving elsewhere) are simply removed from
+  // this calling — they don't appear in the tray since they still have a calling.
+  const col=state.columns.find(c=>c.id===colId); if(!col) return;
+  const label=sgId?(col.subgroups.find(s=>s.id===sgId)||{}).name||'subgroup':col.name;
+  if(!confirm(`Move all filled callings in "${label}" to No Calling? Vacant slots stay. This cannot be undone easily.`)) return;
+  snapshot();
+  const now=new Date().toISOString().slice(0,7);
+  // Count callings per person name across all orgs
+  const callingCount={};
+  state.people.forEach(p=>{ if(!p.vacant&&p.colId!==TRAY) callingCount[p.name]=(callingCount[p.name]||0)+1; });
+  state.people.forEach(p=>{
+    if(p.vacant) return;
+    if(p.colId!==colId) return;
+    if(sgId && p.subgroupId!==sgId) return;
+    // Record history before moving
+    if(p.role){
+      if(!p.history) p.history=[];
+      p.history.unshift({calling:p.role,org:col.name,years:calcTenure(p).toFixed(1),current:false,startDate:p.startDate||null,endDate:now});
+    }
+    // Check if person has other callings
+    const otherCallings=callingCount[p.name]>1;
+    if(otherCallings){
+      // They still have other callings — just remove this one from the board
+      // Mark as vacant so the slot stays, but remove person link
+      p.vacant=true; p.name='VACANT';
+    } else {
+      // Move to tray
+      p.colId=TRAY; p.role=''; p.subgroupId=null; p.time=0; p.startDate=null; p.endDate=null; p.trayGroupId=null;
+    }
+  });
+  closeModal(); rebuildAll(); scheduleSave();
+}
+
 function deleteOrgFromSettings(colId){
   const btn=document.getElementById('cs-delete-btn'); if(!btn) return;
   if(!_deleteOrgArmed){
@@ -3934,6 +4033,12 @@ function openAddDialog(defaultTab){
       body.innerHTML=`
         <label>Org Name</label>
         <input id="add-org-name" type="text" placeholder="e.g. Activities Committee" />
+        <label>Gender</label>
+        <div style="display:flex;gap:6px;margin-bottom:4px;">
+          <button type="button" class="add-toggle" data-val="" id="add-og-any"  style="flex:1;padding:5px;border:1px solid var(--line-2);border-radius:5px;cursor:pointer;font-size:11px;background:var(--navy);color:#fff;font-family:inherit;">All</button>
+          <button type="button" class="add-toggle" data-val="M" id="add-og-m"   style="flex:1;padding:5px;border:1px solid var(--line-2);border-radius:5px;cursor:pointer;font-size:11px;background:var(--surface-2);color:var(--ink-2);font-family:inherit;">Brothers</button>
+          <button type="button" class="add-toggle" data-val="F" id="add-og-f"   style="flex:1;padding:5px;border:1px solid var(--line-2);border-radius:5px;cursor:pointer;font-size:11px;background:var(--surface-2);color:var(--ink-2);font-family:inherit;">Sisters</button>
+        </div>
         <label>Category</label>
         <select id="add-org-cat">
           <option value="">— None —</option>
@@ -3944,6 +4049,14 @@ function openAddDialog(defaultTab){
         </select>`;
       setTimeout(()=>{
         const ni=document.getElementById('add-org-name'); if(ni){ ni.focus(); ni.addEventListener('keydown',e=>{ if(e.key==='Enter') doAddOrg(overlay); }); }
+        // Wire gender toggle
+        ['add-og-any','add-og-m','add-og-f'].forEach(id=>{
+          const btn=document.getElementById(id); if(!btn) return;
+          btn.addEventListener('click',()=>{
+            ['add-og-any','add-og-m','add-og-f'].forEach(b=>{ const el=document.getElementById(b); if(el){el.style.background='var(--surface-2)';el.style.color='var(--ink-2)';} });
+            btn.style.background='var(--navy)'; btn.style.color='#fff';
+          });
+        });
       },0);
     }
   }
@@ -4003,9 +4116,13 @@ function doAddCalling(overlay){
 function doAddOrg(overlay){
   const name=(document.getElementById('add-org-name')||{}).value.trim(); if(!name) return;
   const cat=(document.getElementById('add-org-cat')||{}).value||'';
+  const ogBtn=['add-og-m','add-og-f'].find(id=>{ const el=document.getElementById(id); return el&&el.style.background.includes('navy'); });
+  const orgGenderVal=ogBtn?document.getElementById(ogBtn).dataset.val:'';
   snapshot();
   const maxOrder=state.columns.length?Math.max(...state.columns.map(c=>c.order||0)):-1;
-  state.columns.push({id:mkid(),name,color:COLORS[state.columns.length%COLORS.length],order:maxOrder+2,subgroups:[],hidden:false,category:cat});
+  state.columns.push({id:mkid(),name,color:COLORS[state.columns.length%COLORS.length],order:maxOrder+2,
+    subgroups:[{id:mkid(),name:'General',slot:0,span:1,order:0,isGeneral:true}],
+    hidden:false,category:cat,orgGender:orgGenderVal});
   overlay.remove();
   buildLayout(); renderJumpNav(); scheduleSave();
 }
@@ -4936,6 +5053,59 @@ function exportJSON(){
   const payload=statePayload();
   const json=JSON.stringify(payload, null, 2);
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([json],{type:'application/json'})); a.download='ward_org_chart_backup.json'; a.click();
+}
+
+async function saveCloudBackup(){
+  const url=getSheetsUrl();
+  if(!url){ alert('Cloud sync not configured. Set up Google Sheets sync first via ••• → Sync to Google Sheets.'); return; }
+  setSaveStatus('Saving cloud backup…','rgba(255,255,255,0.5)');
+  try{
+    const data=JSON.stringify(statePayload());
+    const resp=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({action:'backup',data})});
+    const r=await resp.json();
+    if(r.ok){
+      setSaveStatus(`☁ Backup saved (${r.stamp})`);
+      alert(`Cloud backup saved!\n\nTimestamp: ${r.stamp}\n\nYou can restore this snapshot anytime via ••• → Restore from cloud backup.`);
+    } else {
+      setSaveStatus('⚠ Cloud backup failed','#e07060');
+      alert('Cloud backup failed: '+(r.error||'Unknown error'));
+    }
+  }catch(e){ setSaveStatus('⚠ Cloud backup failed','#e07060'); alert('Network error: '+e.message); }
+}
+
+async function restoreCloudBackup(){
+  const url=getSheetsUrl();
+  if(!url){ alert('Cloud sync not configured.'); return; }
+  setSaveStatus('Loading cloud backup…','rgba(255,255,255,0.5)');
+  try{
+    const resp=await fetch(url+'?action=loadbackup');
+    const r=await resp.json();
+    if(!r.ok||!r.data){ setSaveStatus('',''); alert(r.empty?'No cloud backup found yet.\n\nSave one first via ••• → Save cloud backup snapshot.':'Could not load backup: '+(r.error||'Unknown error')); return; }
+    let data;
+    try{ data=JSON.parse(r.data); }catch(e){ alert('Backup data is corrupted.'); return; }
+    if(!data.columns||!data.people){ alert('Backup missing columns or people.'); return; }
+    window._pendingImport=data;
+    const ov=document.createElement('div'); ov.className='modal-overlay';
+    ov.innerHTML=`<div class="modal" style="max-width:360px;border-top:3px solid var(--accent);">
+      <h3>Restore cloud backup?</h3>
+      <p style="font-size:13px;color:var(--ink-2);margin:8px 0;">Saved: <strong>${r.stamp||'unknown time'}</strong></p>
+      <p style="font-size:13px;color:var(--ink-2);margin:8px 0;">${data.people.length} people · ${data.columns.length} orgs</p>
+      <p style="font-size:12px;color:#b03030;margin:12px 0 0;">This will replace your current data. Your local copy will be overwritten.</p>
+      <div class="modal-btns"><button onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+      <button class="primary" onclick="confirmRestoreCloudBackup()">Restore</button></div></div>`;
+    document.body.appendChild(ov);
+  }catch(e){ setSaveStatus('',''); alert('Network error: '+e.message); }
+}
+
+function confirmRestoreCloudBackup(){
+  const data=window._pendingImport; if(!data) return;
+  snapshot();
+  applyLoadedState(data); saveLocal(statePayload()); backfillStartDates(); migrateAllOrgs();
+  buildLayout(); renderTray(); renderJumpNav(); renderFdOrgList(); renderPotentialCallings();
+  setSaveStatus('☁ Restored from cloud backup');
+  document.querySelector('.modal-overlay')&&document.querySelector('.modal-overlay').remove();
+  window._pendingImport=null;
 }
 
 // ── IMPORT ────────────────────────────────────────────────────────────────────
