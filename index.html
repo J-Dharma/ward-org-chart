@@ -469,19 +469,23 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
 .band-settings:hover { opacity: 1; background: var(--surface-2); }
 .band-spacer { flex: 1; }
 
-/* Band body — flex row of slot wrappers */
+/* Band body — vertical growth unrestricted, horizontal scroll via inner wrapper */
 .band-body {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+.band-body-inner {
   display: flex;
   align-items: stretch;
   overflow-x: auto;
   overflow-y: visible;
   scrollbar-width: thin;
   min-height: 80px;
-  /* overflow-x:auto forces overflow-y:auto in CSS spec — work around with clip */
-  overflow-clip-margin: 0;
+  width: 100%;
 }
-.band-body::-webkit-scrollbar { height: 5px; }
-.band-body::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
+.band-body-inner::-webkit-scrollbar { height: 5px; }
+.band-body-inner::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 4px; }
 
 /* ── SUBGROUP COLUMN ── */
 .sg-col {
@@ -2357,9 +2361,13 @@ function buildLayout(){
     const numCols = GRID_COLS; // always 5-column grid
 
     body.className = 'band-body';
-    body.style.display = 'flex';
+    body.style.display = '';
     body.style.width = '';
     body.style.gridTemplateColumns = '';
+
+    // Inner wrapper handles horizontal scroll without clipping vertical height
+    const bodyInner = document.createElement('div');
+    bodyInner.className = 'band-body-inner';
 
     // Group visibleSgWP by slot — same slot renders stacked in one flex column
     const slotGroups = [];
@@ -2555,7 +2563,7 @@ function buildLayout(){
         rh.addEventListener('mousedown', e=>{
           e.preventDefault(); e.stopPropagation();
           const startX=e.clientX, startSpan=sg.span||1;
-          const bodyEl=sgCol.closest('.band-body');
+          const bodyEl=sgCol.closest('.band-body-inner');
           const colWidth=Math.max(50,(bodyEl?bodyEl.getBoundingClientRect().width:COL_W*GRID_COLS)/GRID_COLS);
           document.body.style.cursor='ew-resize';
           const onMove=ev=>{ const ns=Math.min(GRID_COLS,Math.max(1,Math.round(startSpan+(ev.clientX-startX)/colWidth))); if(ns!==sg.span){sg.span=ns;slotWrapper.style.flex=`${ns} ${ns} 0`;slotWrapper.style.minWidth=`${ns*colWidth}px`;} };
@@ -2579,21 +2587,20 @@ function buildLayout(){
         slotWrapper.appendChild(sgCol);
       });
 
-      body.appendChild(slotWrapper);
+      bodyInner.appendChild(slotWrapper);
     });
 
     // Trailing reorder drop zone
-    body.appendChild(makeSgDropZone(col.id, null));
+    bodyInner.appendChild(makeSgDropZone(col.id, null));
 
-
-
-    if(body.children.length===0){
+    if(bodyInner.children.length===0){
       const empty=document.createElement('div');
       empty.style.cssText='padding:20px;color:var(--ink-4);font-size:11px;font-style:italic;';
       empty.textContent='No matching callings';
-      body.appendChild(empty);
+      bodyInner.appendChild(empty);
     }
 
+    body.appendChild(bodyInner);
     // ── Band drag reorder drop zone (before this band) ──
     const beforeZone = makeBandDropZone(col.id);
     stack.appendChild(beforeZone);
@@ -4677,15 +4684,27 @@ function scheduleSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveState
 async function loadFromSheets(){
   const url=getSheetsUrl(); if(!url) return null;
   try{
-    setSaveStatus('Loading from cloud…', 'rgba(255,255,255,0.5)');
     const resp=await fetch(url+'?action=load');
     const result=await resp.json();
-    if(result.ok && result.data) return result.data;
-    // Handle compressed response from GET-based saves
+    console.log('Cloud load result:', JSON.stringify({ok:result.ok, hasData:!!result.data, hasCompressed:!!result.compressed, compressedLen:result.compressed?result.compressed.length:0, error:result.error}));
+    if(result.ok && result.data && result.data.columns) return result.data;
+    // Handle compressed string (from older LZString saves)
     if(result.ok && result.compressed){
-      const decompressed=LZString.decompressFromEncodedURIComponent(result.compressed);
-      if(decompressed) return JSON.parse(decompressed);
+      try{
+        // Try LZString if available
+        if(typeof LZString!=='undefined'){
+          const d=LZString.decompressFromEncodedURIComponent(result.compressed);
+          if(d) return JSON.parse(d);
+        }
+        // Maybe it's raw JSON stored as a string
+        return JSON.parse(result.compressed);
+      } catch(e){ console.warn('Decompress failed:', e); }
     }
+    // Handle case where data came back as a string instead of parsed object
+    if(result.ok && result.data && typeof result.data==='string'){
+      try{ return JSON.parse(result.data); } catch(e){}
+    }
+    console.warn('Cloud load: no usable data in response', result);
     return null;
   } catch(err){
     console.warn('Sheets load failed:', err);
