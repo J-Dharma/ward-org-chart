@@ -4630,40 +4630,32 @@ async function saveToSheets(payload){
     setSaveStatus('Saving…', 'rgba(255,255,255,0.5)');
     const json=JSON.stringify(payload);
     const compressed=LZString.compress(json);
-    // Hex-encode so the data survives URL transport with zero corruption.
+    // Hex-encode so the data survives transport with zero corruption.
     const hex=strToHex(compressed);
+    console.log(`saveToSheets: ${hex.length} hex chars (${compressed.length} compressed)`);
 
-    const CHUNK=6000;
-    const chunks=[];
-    for(let i=0;i<hex.length;i+=CHUNK) chunks.push(hex.slice(i,i+CHUNK));
-    const total=chunks.length;
-    const saveId=Date.now();
-    console.log(`saveToSheets: ${total} chunks, ${hex.length} hex chars (${compressed.length} compressed), saveId=${saveId}`);
-
-    // Send chunks SEQUENTIALLY so they arrive in order.
-    let assembledFlag=false;
-    for(let i=0;i<chunks.length;i++){
-      const reqUrl=`${url}?action=chunk&id=${saveId}&i=${i}&total=${total}&enc=hex&d=${chunks[i]}`;
-      let r;
-      try{
-        const resp=await fetch(reqUrl);
-        const text=await resp.text();
-        try{ r=JSON.parse(text); }
-        catch(parseErr){
-          console.error(`Chunk ${i}: response was not JSON. Raw:`, text.slice(0,300));
-          throw new Error('Apps Script returned non-JSON (chunk '+i+'). Redeploy as NEW VERSION. Response: '+text.slice(0,80));
-        }
-      }catch(netErr){
-        throw new Error('Network error sending chunk '+i+': '+netErr.message);
+    // POST the whole payload in the request body. Using Content-Type
+    // text/plain makes this a CORS "simple request" — no preflight, and
+    // there is no URL-length limit since data is in the body.
+    let r;
+    try{
+      const resp=await fetch(url,{
+        method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body:JSON.stringify({action:'save', enc:'hex', data:hex})
+      });
+      const text=await resp.text();
+      try{ r=JSON.parse(text); }
+      catch(parseErr){
+        console.error('Save: response was not JSON. Raw:', text.slice(0,300));
+        throw new Error('Apps Script returned non-JSON. Redeploy as NEW VERSION. Response: '+text.slice(0,80));
       }
-      console.log(`Chunk ${i}/${total-1} response:`, JSON.stringify(r));
-      if(!r.ok) throw new Error(r.error || 'Apps Script rejected chunk '+i);
-      if(r.assembled){ assembledFlag=true; console.log(`Cloud assembled OK — A1 length ${r.length}`); }
+    }catch(netErr){
+      throw new Error('Network error during save: '+netErr.message);
     }
-
-    if(!assembledFlag){
-      throw new Error('Chunks sent but no assembly confirmed — redeploy the Apps Script as a NEW VERSION.');
-    }
+    console.log('Save response:', JSON.stringify(r));
+    if(!r.ok) throw new Error(r.error || 'Apps Script rejected the save');
+    console.log(`Cloud save OK — wrote ${r.length} chars across ${r.cells} cell(s)`);
 
     const now=new Date();
     setSaveStatus(`☁ Saved ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`);
