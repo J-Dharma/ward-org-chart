@@ -792,6 +792,16 @@ body.tv-mode.tv-idle #topbar { opacity: 0; pointer-events: none; }
   column-fill: balance;
   /* column-count set dynamically by updateTrayColumns */
 }
+/* Potential callings always single-column block, no column-count */
+.pot-chip-grid {
+  display: block !important;
+  column-count: unset !important;
+}
+.pot-chip-grid .tray-chip {
+  display: block !important;
+  width: 100% !important;
+  box-sizing: border-box;
+}
 .tray-chip {
   display:flex; align-items:center; gap:4px; padding:6px 12px 6px 10px;
   cursor:grab; border-bottom:1px solid var(--line);
@@ -3559,12 +3569,6 @@ function updateTrayColumns(){
     inner.style.columnCount=cols;
     inner.style.columnGap='0';
     inner.querySelectorAll('.tray-chip').forEach(c=>{ c.style.width='100%'; c.style.boxSizing='border-box'; c.style.display='block'; });
-  });
-  // Pot chips always single column, flex layout
-  document.querySelectorAll('.pot-chip-grid').forEach(inner=>{
-    inner.style.columnCount='';
-    inner.style.display='flex';
-    inner.style.flexWrap='wrap';
   });
 }
 
