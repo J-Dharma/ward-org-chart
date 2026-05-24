@@ -550,6 +550,16 @@ body.hide-tenure .row-multi { margin-left: auto; }
 }
 .person-row:active { cursor: grabbing; }
 .person-row:hover { background: #deeaf7 !important; }
+
+/* Row hover tooltip */
+#row-tooltip {
+  position: fixed; z-index: 6000; pointer-events: none; display: none;
+  background: #fff; border: 1px solid var(--line-2); border-radius: 6px;
+  padding: 7px 11px; box-shadow: 0 3px 12px rgba(0,0,0,0.13);
+  max-width: 320px; white-space: normal;
+}
+#row-tooltip .tt-name { font-size: 13px; font-weight: 600; color: var(--ink); }
+#row-tooltip .tt-role { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
 .person-row.dragging { opacity: 0.35; }
 .person-row.search-match { background: rgba(255,220,120,0.3) !important; }
 .person-row.search-dim { opacity: 0.25; }
@@ -1765,6 +1775,27 @@ document.addEventListener('click',e=>{
 // ── UI STATE ──────────────────────────────────────────────────────────────────
 let autoSg = true;           // auto-detect subgroups
 
+// ── ROW TOOLTIP ───────────────────────────────────────────────────────────────
+const _tip = {
+  el: null,
+  get(){ return this.el || (this.el = document.getElementById('row-tooltip')); },
+  show(name, role, e){
+    const t = this.get();
+    t.querySelector('.tt-name').textContent = name;
+    t.querySelector('.tt-role').textContent = role;
+    t.style.display = 'block';
+    this.move(e);
+  },
+  move(e){
+    const t = this.get(); if(t.style.display==='none') return;
+    const x = e.clientX + 14, y = e.clientY + 14;
+    const ow = t.offsetWidth, oh = t.offsetHeight;
+    t.style.left = (x + ow > window.innerWidth  ? e.clientX - ow - 6 : x) + 'px';
+    t.style.top  = (y + oh > window.innerHeight ? e.clientY - oh - 6 : y) + 'px';
+  },
+  hide(){ this.get().style.display = 'none'; }
+};
+
 // ── ZOOM ─────────────────────────────────────────────────────────────────────
 const ZOOM_STEPS = [50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200];
 let zoomLevel = parseInt(localStorage.getItem('ward-zoom') || '100', 10);
@@ -2654,6 +2685,11 @@ function buildPersonRow(p, col, q, mc){
   }
 
   row.append(nameEl,dot,roleEl);
+
+  const tipName = isVac ? 'Vacant' : p.name;
+  row.addEventListener('mouseenter', e => _tip.show(tipName, displayRole, e));
+  row.addEventListener('mousemove',  e => _tip.move(e));
+  row.addEventListener('mouseleave', () => _tip.hide());
 
   // Multi-calling badge — clicking opens person card
   if(!isVac&&mc[p.name]>1){
@@ -5105,5 +5141,6 @@ if(syncEnabled){
   });
 }
 </script>
+<div id="row-tooltip"><div class="tt-name"></div><div class="tt-role"></div></div>
 </body>
 </html>
