@@ -1017,6 +1017,64 @@ body.hide-tenure .row-multi { margin-left: auto; }
 }
 .add-dialog-footer button.primary { background: var(--navy); color: #fff; border-color: var(--navy); }
 .add-dialog-footer button:hover { opacity: 0.85; }
+
+/* ── MOBILE ── */
+@media (max-width: 640px) {
+  /* Jump nav: horizontal scroll strip */
+  #jumpnav { overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap !important; }
+  #jumpnav::-webkit-scrollbar { display: none; }
+
+  /* Stack area: full width, leave room for tray peek */
+  #stack-area { padding-bottom: 64px; }
+
+  /* Tray: fixed bottom sheet */
+  #tray-pane {
+    position: fixed !important;
+    bottom: 0; left: 0; right: 0;
+    width: 100% !important; min-width: unset !important; max-width: unset !important;
+    height: 58vh;
+    border-left: none !important;
+    border-top: 2px solid var(--accent);
+    border-radius: 14px 14px 0 0;
+    transform: translateY(calc(100% - 48px));
+    transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+    z-index: 400;
+    box-shadow: 0 -4px 28px rgba(0,0,0,0.18);
+  }
+  #tray-pane.mobile-tray-open { transform: translateY(0); }
+
+  /* Override desktop collapsed styles for mobile */
+  #tray-pane.collapsed {
+    width: 100% !important; min-width: unset !important;
+    background: var(--navy) !important;
+  }
+  #tray-pane.collapsed #tray-inner { display: flex !important; }
+  #tray-pane.collapsed #tray-rail  { display: none !important; }
+
+  /* Hide desktop controls not needed on mobile */
+  #tray-resize-handle { display: none !important; }
+  #tray-toggle-btn    { display: none !important; }
+
+  /* Drag handle pill at top of tray */
+  #tray-handle {
+    display: block;
+    width: 38px; height: 4px;
+    background: rgba(255,255,255,0.35);
+    border-radius: 2px;
+    margin: 8px auto 2px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  /* Tray head clickable on mobile */
+  #tray-head { cursor: pointer; padding-top: 6px; }
+
+  /* Topbar: hide stat pips to save room */
+  #tb-stats { display: none; }
+
+  /* Bands: slightly larger tap targets */
+  .band-head { padding: 12px 14px; }
+}
 </style>
 </head>
 <body>
@@ -1118,6 +1176,7 @@ body.hide-tenure .row-multi { margin-left: auto; }
 <div id="body-wrap">
   <div id="stack-area"></div>
   <div id="tray-pane">
+    <div id="tray-handle" onclick="mobileTrayToggle()"></div>
     <div id="tray-resize-handle"></div>
     <div id="tray-rail" onclick="toggleTray()" title="Expand No Calling tray">
       <div style="font-size:18px;color:#fff;line-height:1;">»</div>
@@ -2312,8 +2371,16 @@ function buildLayout(){
     head.onclick = e=>{
       if(e.target.closest('.band-settings')) return;
       if(e.target.closest('[draggable="true"]')) return;
+      const wasCollapsed = col.collapsed;
       col.collapsed = !col.collapsed;
-      band.classList.toggle('collapsed', col.collapsed);
+      // Mobile: one-at-a-time — collapse all others when opening a band
+      if(window.innerWidth <= 640 && wasCollapsed){
+        state.columns.forEach(c=>{ if(c.id!==col.id) c.collapsed=true; });
+        buildLayout();
+        setTimeout(()=>scrollToBand(col.id), 60);
+      } else {
+        band.classList.toggle('collapsed', col.collapsed);
+      }
       scheduleSave();
     };
 
@@ -3563,6 +3630,23 @@ function toggleTray(){
   const _fp=document.getElementById('filter-panel'); if(_fp) _fp.style.right=trayOpen?'295px':'48px';
   if(trayOpen) requestAnimationFrame(updateTrayColumns);
 }
+
+let mobileTrayOpen = false;
+function mobileTrayToggle(){
+  if(window.innerWidth > 640) return;
+  mobileTrayOpen = !mobileTrayOpen;
+  document.getElementById('tray-pane').classList.toggle('mobile-tray-open', mobileTrayOpen);
+}
+
+// Wire up tray-head tap to toggle on mobile
+document.addEventListener('DOMContentLoaded', ()=>{
+  const head = document.getElementById('tray-head');
+  if(head) head.addEventListener('click', e=>{
+    if(window.innerWidth > 640) return;
+    if(e.target.closest('button') && !e.target.closest('#tray-toggle-btn')) return;
+    mobileTrayToggle();
+  });
+});
 
 // ── SUBGROUPS ────────────────────────────────────────────────────────────────
 function removeSubgroup(colId, sgId){
