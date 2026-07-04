@@ -119,6 +119,7 @@ body.hide-tenure .row-multi { margin-left: auto; }
   background: var(--accent);
   border-radius: 2px;
 }
+.tb-title-short { display: none; }
 .tb-sep { width: 1px; height: 20px; background: rgba(255,255,255,0.15); flex-shrink: 0; }
 .tb-spacer { flex: 1; }
 #tb-search {
@@ -1088,7 +1089,9 @@ body.hide-tenure .row-multi { margin-left: auto; }
   /* Topbar: keep title, search, add, undo, and sync status */
   #tb-stats, .tb-sep, #zoom-ctrl, #overflow-menu-wrap { display: none !important; }
   #topbar { padding: 0 8px; gap: 5px; }
-  .tb-title { font-size: 10px; gap: 5px; max-width: 68px; overflow: hidden; text-overflow: ellipsis; }
+  .tb-title { font-size: 10px; gap: 5px; }
+  .tb-title-full { display: none; }
+  .tb-title-short { display: inline; }
   #tb-search { flex: 1; width: auto; min-width: 60px; padding-left: 26px; }
   #add-btn, #undo-btn { padding: 5px 6px; font-size: 10px; gap: 3px; }
   #save-status { min-width: unset; max-width: 72px; overflow: hidden; text-overflow: ellipsis; font-size: 9px; }
@@ -1151,7 +1154,7 @@ body.hide-tenure .row-multi { margin-left: auto; }
 })();
 </script>
 <div id="topbar">
-  <div class="tb-title">Twin Oaks Valley Ward</div>
+  <div class="tb-title"><span class="tb-title-full">Twin Oaks Valley Ward</span><span class="tb-title-short">TOV Ward</span></div>
   <div class="tb-sep"></div>
   <input type="text" id="tb-search" placeholder="Search…" oninput="onSearch(this.value)" />
   <button id="add-btn" class="tb-btn" onclick="openAddDialog()" title="Add org or member">+ Add</button>
