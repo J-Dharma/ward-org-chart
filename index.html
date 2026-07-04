@@ -1086,6 +1086,23 @@ body.hide-tenure .row-multi { margin-left: auto; }
   .pot-resize { display: none !important; }
   .pot-body { max-height: 110px !important; }
 
+  /* Tray chip grid: native CSS multi-column layout instead of the JS-measured
+     fixed-height flex-wrap trick. That trick freezes container height from a
+     single chip's offsetHeight at one point in time — if that measurement
+     happens before web fonts finish loading, the real (taller) chip height
+     no longer matches, and later rows silently overflow past the frozen
+     height. CSS columns need no measurement and always lay out correctly. */
+  .tray-chip-grid-inner {
+    display: block !important;
+    column-count: 3 !important;
+    column-gap: 0 !important;
+    height: auto !important;
+  }
+  .tray-chip-grid-inner .tray-chip {
+    width: 100% !important;
+    break-inside: avoid;
+  }
+
   /* Topbar: keep title, search, add, undo, and sync status */
   #tb-stats, .tb-sep, #zoom-ctrl, #overflow-menu-wrap { display: none !important; }
   #topbar { padding: 0 8px; gap: 5px; }
@@ -3600,10 +3617,13 @@ function makeTrayGroupDropZone(insertBeforeIdx){
 }
 
 function updateTrayColumns(){
+  // Mobile uses a native CSS column-count layout (see mobile stylesheet) that
+  // needs no measurement and can't drift out of sync with real chip height.
+  if(isMobileLayout()) return;
   const pane=document.getElementById('tray-pane');
   if(!pane||!trayOpen) return;
   const w=pane.offsetWidth;
-  const cols=isMobileLayout() ? 3 : (w>=400?3:w>=220?2:1);
+  const cols=w>=400?3:w>=220?2:1;
   document.querySelectorAll('.tray-chip-grid-inner').forEach(inner=>{
     const chips=inner.querySelectorAll('.tray-chip');
     if(!chips.length){ inner.style.height=''; return; }
