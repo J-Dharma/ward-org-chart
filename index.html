@@ -3637,7 +3637,13 @@ function toggleTray(){
   const btn=document.getElementById('tray-toggle-btn');
   if(btn) btn.textContent= trayOpen ? '←' : '→';
   const _fp=document.getElementById('filter-panel'); if(_fp) _fp.style.right=trayOpen?'295px':'48px';
-  if(trayOpen) requestAnimationFrame(updateTrayColumns);
+  if(trayOpen){
+    // Wait for the width transition to finish before measuring — otherwise
+    // updateTrayColumns reads a mid-animation width and under-counts columns.
+    const onEnd=e=>{ if(e.propertyName==='width') updateTrayColumns(); };
+    pane.addEventListener('transitionend', onEnd, {once:true});
+    setTimeout(()=>{ pane.removeEventListener('transitionend', onEnd); updateTrayColumns(); }, 200);
+  }
 }
 
 function isMobileLayout(){ return window.matchMedia('(max-width: 640px)').matches; }
