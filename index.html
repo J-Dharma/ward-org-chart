@@ -3603,7 +3603,7 @@ function updateTrayColumns(){
   const pane=document.getElementById('tray-pane');
   if(!pane||!trayOpen) return;
   const w=pane.offsetWidth;
-  const cols=w>=400?3:w>=220?2:1;
+  const cols=isMobileLayout() ? 3 : (w>=400?3:w>=220?2:1);
   document.querySelectorAll('.tray-chip-grid-inner').forEach(inner=>{
     const chips=inner.querySelectorAll('.tray-chip');
     if(!chips.length){ inner.style.height=''; return; }
@@ -3670,6 +3670,7 @@ function mobileTrayToggle(){
   if(!isMobileLayout()) return;
   mobileTrayOpen = !mobileTrayOpen;
   document.getElementById('tray-pane').classList.toggle('mobile-tray-open', mobileTrayOpen);
+  if(mobileTrayOpen) updateTrayColumns();
 }
 
 // Wire up tray-head tap to toggle on mobile
