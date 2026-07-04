@@ -1059,14 +1059,13 @@ body.hide-tenure .row-multi { margin-left: auto; }
   #tray-resize-handle { display: none !important; }
   #tray-toggle-btn    { display: none !important; }
 
-  /* Drag handle pill at top of tray — generous tap target, small visual pill */
+  /* Drag handle pill — overlaid on tray-head itself (not extra flow height),
+     so the peek reveal is pure header, no gap of the pane's own white background */
   #tray-handle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%; height: 24px;
-    flex-shrink: 0;
+    position: absolute; top: 0; left: 0; right: 0; height: 20px;
+    display: flex; align-items: center; justify-content: center;
     cursor: pointer;
+    z-index: 5;
   }
   #tray-handle::before {
     content: '';
@@ -1075,8 +1074,13 @@ body.hide-tenure .row-multi { margin-left: auto; }
     border-radius: 2px;
   }
 
-  /* Tray head clickable on mobile */
-  #tray-head { cursor: pointer; padding-top: 6px; }
+  /* Tray head clickable on mobile — extra top padding clears the handle overlay */
+  #tray-head { cursor: pointer; padding-top: 16px; }
+
+  /* Potential Callings panel: cap height so it can't crowd out the main list;
+     its resize handle relies on mouse drag, which doesn't work on touch anyway */
+  .pot-resize { display: none !important; }
+  .pot-body { max-height: 110px !important; }
 
   /* Topbar: hide stat pips to save room */
   #tb-stats { display: none; }
@@ -1185,7 +1189,6 @@ body.hide-tenure .row-multi { margin-left: auto; }
 <div id="body-wrap">
   <div id="stack-area"></div>
   <div id="tray-pane">
-    <div id="tray-handle" onclick="mobileTrayToggle()"></div>
     <div id="tray-resize-handle"></div>
     <div id="tray-rail" onclick="toggleTray()" title="Expand No Calling tray">
       <div style="font-size:18px;color:#fff;line-height:1;">»</div>
@@ -1193,6 +1196,7 @@ body.hide-tenure .row-multi { margin-left: auto; }
     </div>
     <div id="tray-inner">
       <div id="tray-head">
+        <div id="tray-handle" onclick="mobileTrayToggle()"></div>
         <span>No Calling <span id="tray-cnt" style="font-weight:400;opacity:0.7;"></span></span>
         <button onclick="addTrayGroup()" title="Add group" style="font-size:14px;line-height:1;padding:2px 7px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);border-radius:5px;color:#fff;cursor:pointer;flex-shrink:0;font-family:inherit;font-weight:600;transition:background 0.12s">+</button>
         <button id="tray-filter-btn" onclick="toggleTrayFilter()" style="font-size:11px;padding:3px 8px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);border-radius:5px;color:#fff;cursor:pointer;white-space:nowrap;flex-shrink:0;font-family:inherit;font-weight:500;transition:background 0.12s">Filter ▾</button>
@@ -3427,6 +3431,7 @@ function renderPotentialCallings(){
 
   // ── Resize handle (drag up/down to size the body) ──
   const resizeH=document.createElement('div');
+  resizeH.className='pot-resize';
   resizeH.style.cssText='height:9px;cursor:ns-resize;background:var(--surface-2);flex-shrink:0;display:flex;align-items:center;justify-content:center;';
   resizeH.innerHTML='<div style="width:34px;height:3px;border-radius:2px;background:var(--line-2);pointer-events:none;"></div>';
   if(state._potCollapsed) resizeH.style.display='none';
@@ -3446,6 +3451,7 @@ function renderPotentialCallings(){
 
   // ── Body ──
   const body=document.createElement('div');
+  body.className='pot-body';
   body.style.cssText='overflow-y:auto;overflow-x:hidden;height:'+state._potHeight+'px;'+(state._potCollapsed?'display:none;':'');
 
   // Resize handle drag — adjusts body height
