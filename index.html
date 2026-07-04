@@ -1026,8 +1026,11 @@ body.hide-tenure .row-multi { margin-left: auto; }
   #jumpnav { overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap !important; max-width: 100vw; }
   #jumpnav::-webkit-scrollbar { display: none; }
 
-  /* Stack area: full width, leave room for tray peek */
-  #stack-area { padding-bottom: 64px; max-width: 100vw; }
+  /* Stack area: full width. Generous bottom padding so scrollToBand() can
+     always scroll a collapsed band up to the very top of the viewport, even
+     the last one in the list — otherwise there's not enough scroll room
+     below it and it settles low, hidden behind the tray peek. */
+  #stack-area { padding-bottom: 70vh; max-width: 100vw; }
   #body-wrap { max-width: 100vw; overflow-x: hidden; }
 
   /* Tray: fixed bottom sheet — anchor with inset instead of width so it can't
@@ -1082,12 +1085,13 @@ body.hide-tenure .row-multi { margin-left: auto; }
   .pot-resize { display: none !important; }
   .pot-body { max-height: 110px !important; }
 
-  /* Topbar: keep only search, add, undo, and sync status */
-  #tb-stats, .tb-title, .tb-sep, #zoom-ctrl, #overflow-menu-wrap { display: none !important; }
-  #topbar { padding: 0 10px; gap: 6px; }
-  #tb-search { flex: 1; width: auto; min-width: 0; }
-  #add-btn, #undo-btn { padding: 5px 8px; font-size: 11px; }
-  #save-status { min-width: unset; font-size: 9px; }
+  /* Topbar: keep title, search, add, undo, and sync status */
+  #tb-stats, .tb-sep, #zoom-ctrl, #overflow-menu-wrap { display: none !important; }
+  #topbar { padding: 0 8px; gap: 5px; }
+  .tb-title { font-size: 10px; gap: 5px; max-width: 68px; overflow: hidden; text-overflow: ellipsis; }
+  #tb-search { flex: 1; width: auto; min-width: 60px; padding-left: 26px; }
+  #add-btn, #undo-btn { padding: 5px 6px; font-size: 10px; gap: 3px; }
+  #save-status { min-width: unset; max-width: 72px; overflow: hidden; text-overflow: ellipsis; font-size: 9px; }
 
   /* Bands: slightly larger tap targets */
   .band-head { padding: 12px 14px; }
