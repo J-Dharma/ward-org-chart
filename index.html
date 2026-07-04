@@ -1082,8 +1082,12 @@ body.hide-tenure .row-multi { margin-left: auto; }
   .pot-resize { display: none !important; }
   .pot-body { max-height: 110px !important; }
 
-  /* Topbar: hide stat pips to save room */
-  #tb-stats { display: none; }
+  /* Topbar: keep only search, add, undo, and sync status */
+  #tb-stats, .tb-title, .tb-sep, #zoom-ctrl, #overflow-menu-wrap { display: none !important; }
+  #topbar { padding: 0 10px; gap: 6px; }
+  #tb-search { flex: 1; width: auto; min-width: 0; }
+  #add-btn, #undo-btn { padding: 5px 8px; font-size: 11px; }
+  #save-status { min-width: unset; font-size: 9px; }
 
   /* Bands: slightly larger tap targets */
   .band-head { padding: 12px 14px; }
