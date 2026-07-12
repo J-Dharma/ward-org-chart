@@ -682,7 +682,7 @@ body.hide-tenure .row-multi { margin-left: auto; }
 }
 #tray-pane.resizing { transition: none; }
 #tray-resize-handle {
-  position: absolute; left: 0; top: 0; bottom: 0; width: 6px;
+  position: absolute; left: -6px; top: 0; bottom: 0; width: 18px;
   cursor: ew-resize; z-index: 10; display: flex;
   align-items: center; justify-content: center;
 }
@@ -3103,6 +3103,9 @@ setTimeout(()=>{
   const handle=document.getElementById('tray-resize-handle');
   const pane=document.getElementById('tray-pane');
   if(!handle||!pane) return;
+  // Restore last resized width (per-device preference, not synced ward data)
+  const savedW=parseInt(localStorage.getItem('ward-tray-width')||'','10');
+  if(savedW && !isMobileLayout()){ pane.style.width=savedW+'px'; updateTrayColumns(); }
   handle.addEventListener('mousedown',e=>{
     trayResizing=true;
     trayResizeStartX=e.clientX;
@@ -3128,7 +3131,10 @@ window.addEventListener('mouseup',e=>{
   if(trayResizing){
     trayResizing=false;
     const pane=document.getElementById('tray-pane');
-    if(pane) pane.classList.remove('resizing');
+    if(pane){
+      pane.classList.remove('resizing');
+      localStorage.setItem('ward-tray-width', Math.round(pane.getBoundingClientRect().width));
+    }
     updateTrayColumns();
   }
 });
