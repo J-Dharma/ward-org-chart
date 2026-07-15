@@ -3018,6 +3018,13 @@ function dropOntoVacant(vacant, colId){
   snapshot();
   const prevColId=p.colId, prevSubgroupId=p.subgroupId, prevRole=p.role;
   const replacedVacancy={...vacant};
+  // Remember who p and the vacant slot sat next to, so a later revert can
+  // restore both to their original positions instead of just tacking them
+  // onto the end of the list.
+  const personIdx0=state.people.findIndex(x=>x.id===dragId);
+  const prevNextSiblingId=state.people[personIdx0+1]?state.people[personIdx0+1].id:null;
+  const vacantIdx0=state.people.findIndex(x=>x.id===vacant.id);
+  const replacedVacancyNextSiblingId=state.people[vacantIdx0+1]?state.people[vacantIdx0+1].id:null;
 
   // Leaving behind an occupied calling — same org or different — should
   // always open a vacancy there. (Coming from the No Calling tray doesn't,
@@ -3042,7 +3049,7 @@ function dropOntoVacant(vacant, colId){
   p.subgroupId=vacant.subgroupId||null;
   const destColV=state.columns.find(c=>c.id===colId);
   if(p.role) resumeOrStartCalling(p, p.role, destColV?destColV.name:'');
-  markPending({personId:p.id, prevColId, prevSubgroupId, prevRole, createdVacancyId, replacedVacancy});
+  markPending({personId:p.id, prevColId, prevSubgroupId, prevRole, createdVacancyId, replacedVacancy, prevNextSiblingId, replacedVacancyNextSiblingId});
   dragId=null;
   rebuildAll();
 }
@@ -3057,6 +3064,8 @@ function dropReorder(colId, sgId, beforePid){
   }
   snapshot();
   const pcPrevSubgroupId=p.subgroupId, pcPrevRole=p.role;
+  const pcPersonIdx0=state.people.findIndex(x=>x.id===dragId);
+  const pcPrevNextSiblingId=state.people[pcPersonIdx0+1]?state.people[pcPersonIdx0+1].id:null;
 
   const sameCol=p.colId===colId;
   let createdVacancyId=null;
@@ -3088,7 +3097,7 @@ function dropReorder(colId, sgId, beforePid){
     state.people.splice(lastIdx+1,0,p);
   }
   if(!sameCol && !p.vacant){
-    markPending({personId:p.id, prevColId, prevSubgroupId:pcPrevSubgroupId, prevRole:pcPrevRole, createdVacancyId, replacedVacancy:null});
+    markPending({personId:p.id, prevColId, prevSubgroupId:pcPrevSubgroupId, prevRole:pcPrevRole, createdVacancyId, replacedVacancy:null, prevNextSiblingId:pcPrevNextSiblingId});
   }
   dragId=null;
   rebuildAll();
@@ -4837,11 +4846,21 @@ function revertPendingForPerson(personId){
       if(idx>=0) state.people.splice(idx,1);
     }
     if(entry.replacedVacancy){
-      state.people.push({...entry.replacedVacancy});
+      // Restore the consumed vacant slot to where it originally sat, not the
+      // end of the list, so the calling order in its org isn't disturbed.
+      const vac={...entry.replacedVacancy};
+      const sibIdx=entry.replacedVacancyNextSiblingId?state.people.findIndex(x=>x.id===entry.replacedVacancyNextSiblingId):-1;
+      if(sibIdx>=0) state.people.splice(sibIdx,0,vac); else state.people.push(vac);
     }
     if(p){
       p.colId=entry.prevColId; p.subgroupId=entry.prevSubgroupId; p.role=entry.prevRole;
       if(entry.prevColId!==TRAY) p.trayGroupId=null;
+      // Move p back to where they originally sat in the list, not wherever
+      // they happen to be now, so their old org's ordering isn't disturbed.
+      const curIdx=state.people.findIndex(x=>x.id===p.id);
+      if(curIdx>=0) state.people.splice(curIdx,1);
+      const sibIdx2=entry.prevNextSiblingId?state.people.findIndex(x=>x.id===entry.prevNextSiblingId):-1;
+      if(sibIdx2>=0) state.people.splice(sibIdx2,0,p); else state.people.push(p);
     }
   });
   pendingChanges=pendingChanges.filter(pc=>pc.personId!==personId);
