@@ -586,6 +586,30 @@ body.hide-tenure .row-multi { margin-left: auto; }
   cursor: grab;
 }
 .person-row.vacant-row:hover { background: #ffe0c8 !important; }
+
+/* ── PENDING CHANGE (Commit workflow) ── */
+.person-row.pending-change,
+.tray-chip.pending-change {
+  outline: 2px solid #ff9500;
+  outline-offset: -2px;
+}
+.pending-actions {
+  display: flex; align-items: center; gap: 2px; flex-shrink: 0;
+  margin-right: 4px;
+}
+.pending-commit-btn, .pending-revert-btn {
+  width: 16px; height: 16px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; line-height: 1; cursor: pointer;
+  flex-shrink: 0; border: none; font-family: inherit;
+}
+.pending-commit-btn { background: #ff9500; color: #fff; }
+.pending-commit-btn:hover { background: #e08400; }
+.pending-revert-btn { background: rgba(0,0,0,0.08); color: var(--ink-3); }
+.pending-revert-btn:hover { background: rgba(0,0,0,0.16); color: var(--ink); }
+
+#commit-btn #commit-count { font-weight: 700; }
+#commit-btn.has-pending { background: rgba(255,149,0,0.16); border-color: rgba(255,149,0,0.45); color: #fff; }
 .person-row.vacant-row .person-name {
   color: var(--vac) !important; font-weight: 700 !important;
   letter-spacing: 0.05em; font-size: calc(var(--row-font) - 1.5px);
@@ -1175,6 +1199,7 @@ body.hide-tenure .row-multi { margin-left: auto; }
   <div class="tb-sep"></div>
   <input type="text" id="tb-search" placeholder="Search…" oninput="onSearch(this.value)" />
   <button id="add-btn" class="tb-btn" onclick="openAddDialog()" title="Add org or member">+ Add</button>
+  <button id="commit-btn" class="tb-btn" onclick="openCommitDialog()" title="Review and commit pending changes">✓ Commit<span id="commit-count"></span></button>
   <button id="undo-btn" class="tb-btn" onclick="undo()" title="Ctrl+Z">↩ Undo</button>
   <div class="tb-sep"></div>
   <div id="tb-stats"></div>
@@ -2795,6 +2820,20 @@ function buildPersonRow(p, col, q, mc){
 
   row.append(nameEl,dot,roleEl);
 
+  if(!isVac && isPersonPending(p.id)){
+    row.classList.add('pending-change');
+    const actions=document.createElement('div');
+    actions.className='pending-actions';
+    const commitBtn=document.createElement('button');
+    commitBtn.className='pending-commit-btn'; commitBtn.textContent='✓'; commitBtn.title='Commit this change';
+    commitBtn.onclick=e=>{ e.stopPropagation(); commitPersonPending(p.id); };
+    const revertBtn=document.createElement('button');
+    revertBtn.className='pending-revert-btn'; revertBtn.textContent='×'; revertBtn.title='Revert this change';
+    revertBtn.onclick=e=>{ e.stopPropagation(); revertPendingForPerson(p.id); };
+    actions.append(commitBtn, revertBtn);
+    row.prepend(actions);
+  }
+
   const tipName = isVac ? 'Vacant' : p.name;
   row.addEventListener('mouseenter', e => _tip.show(tipName, displayRole, e));
   row.addEventListener('mousemove',  e => _tip.move(e));
@@ -2917,20 +2956,27 @@ function dropOntoOrg(colId, sgId, beforePid){
     warnGenderMismatch(col); dragId=null; return;
   }
   snapshot();
+  const prevColId=p.colId, prevSubgroupId=p.subgroupId, prevRole=p.role;
+  const orgActuallyChanged=(p.colId!==colId);
 
   const movingBetweenCols=(p.colId!==colId && p.colId!==TRAY);
+  let createdVacancyId=null;
   if(movingBetweenCols && p.role && !p.vacant){
     // leave vacant at original position
     const peers=state.people.filter(x=>x.colId===p.colId);
     const srcPeer=peers[dragSrcIdx]||null;
     const ins=srcPeer?state.people.indexOf(srcPeer):state.people.length;
-    state.people.splice(ins,0,{id:mkid(),name:'VACANT',role:p.role,colId:p.colId,subgroupId:p.subgroupId,time:0,vacant:true});
+    createdVacancyId=mkid();
+    state.people.splice(ins,0,{id:createdVacancyId,name:'VACANT',role:p.role,colId:p.colId,subgroupId:p.subgroupId,time:0,vacant:true});
   }
   p.colId=colId;
   p.subgroupId=sgId||null;
   const destCol=state.columns.find(c=>c.id===colId);
   // role stays as-is when moving between orgs; resume/start based on current role
   resumeOrStartCalling(p, p.role, destCol?destCol.name:'');
+  if(!p.vacant && orgActuallyChanged){
+    markPending({personId:p.id, prevColId, prevSubgroupId, prevRole, createdVacancyId, replacedVacancy:null});
+  }
   dragId=null;
   rebuildAll();
 }
@@ -2944,16 +2990,20 @@ function dropOntoVacant(vacant, colId){
     warnGenderMismatch(col); dragId=null; return;
   }
   snapshot();
+  const prevColId=p.colId, prevSubgroupId=p.subgroupId, prevRole=p.role;
+  const replacedVacancy={...vacant};
 
   // Leaving behind an occupied calling — same org or different — should
   // always open a vacancy there. (Coming from the No Calling tray doesn't,
   // since there's no prior calling to vacate.)
   const leavingCalling=(p.colId!==TRAY && p.role && !p.vacant);
+  let createdVacancyId=null;
   if(leavingCalling){
     const peers=state.people.filter(x=>x.colId===p.colId);
     const srcPeer=peers[dragSrcIdx]||null;
     const ins=srcPeer?state.people.indexOf(srcPeer):state.people.length;
-    state.people.splice(ins,0,{id:mkid(),name:'VACANT',role:p.role,colId:p.colId,subgroupId:p.subgroupId,time:0,vacant:true});
+    createdVacancyId=mkid();
+    state.people.splice(ins,0,{id:createdVacancyId,name:'VACANT',role:p.role,colId:p.colId,subgroupId:p.subgroupId,time:0,vacant:true});
   }
   // Assign vacant's calling to person
   if(vacant.role) p.role=vacant.role;
@@ -2966,6 +3016,7 @@ function dropOntoVacant(vacant, colId){
   p.subgroupId=vacant.subgroupId||null;
   const destColV=state.columns.find(c=>c.id===colId);
   if(p.role) resumeOrStartCalling(p, p.role, destColV?destColV.name:'');
+  markPending({personId:p.id, prevColId, prevSubgroupId, prevRole, createdVacancyId, replacedVacancy});
   dragId=null;
   rebuildAll();
 }
@@ -2979,13 +3030,16 @@ function dropReorder(colId, sgId, beforePid){
     warnGenderMismatch(col); dragId=null; return;
   }
   snapshot();
+  const pcPrevSubgroupId=p.subgroupId, pcPrevRole=p.role;
 
   const sameCol=p.colId===colId;
+  let createdVacancyId=null;
   if(!sameCol && p.colId!==TRAY && p.role && !p.vacant){
     const peers=state.people.filter(x=>x.colId===p.colId);
     const srcPeer=peers[dragSrcIdx]||null;
     const ins=srcPeer?state.people.indexOf(srcPeer):state.people.length;
-    state.people.splice(ins,0,{id:mkid(),name:'VACANT',role:p.role,colId:p.colId,subgroupId:p.subgroupId,time:0,vacant:true});
+    createdVacancyId=mkid();
+    state.people.splice(ins,0,{id:createdVacancyId,name:'VACANT',role:p.role,colId:p.colId,subgroupId:p.subgroupId,time:0,vacant:true});
   }
 
   const fromIdx=state.people.findIndex(x=>x.id===dragId);
@@ -3006,6 +3060,9 @@ function dropReorder(colId, sgId, beforePid){
     let lastIdx=-1;
     state.people.forEach((x,i)=>{ if(x.colId===colId&&x.subgroupId===sgId) lastIdx=i; });
     state.people.splice(lastIdx+1,0,p);
+  }
+  if(!sameCol && !p.vacant){
+    markPending({personId:p.id, prevColId, prevSubgroupId:pcPrevSubgroupId, prevRole:pcPrevRole, createdVacancyId, replacedVacancy:null});
   }
   dragId=null;
   rebuildAll();
@@ -3047,6 +3104,8 @@ function dropToTray(trayGroupId){
   snapshot();
   const p=state.people.find(x=>x.id===dragId);
   if(!p){ dragId=null; return; }
+  const pcPrevColId=p.colId, pcPrevSubgroupId=p.subgroupId, pcPrevRole=p.role;
+  let pcCreatedVacancyId=null;
 
   if(p.colId!==TRAY && !p.vacant){
     const col=state.columns.find(c=>c.id===p.colId);
@@ -3080,7 +3139,8 @@ function dropToTray(trayGroupId){
       const peers=state.people.filter(x=>x.colId===p.colId);
       const srcPeer=peers[dragSrcIdx]||null;
       const ins=srcPeer?state.people.indexOf(srcPeer):state.people.length;
-      state.people.splice(ins,0,{id:mkid(),name:'VACANT',role:p.role,colId:p.colId,subgroupId:p.subgroupId,time:0,vacant:true});
+      pcCreatedVacancyId=mkid();
+      state.people.splice(ins,0,{id:pcCreatedVacancyId,name:'VACANT',role:p.role,colId:p.colId,subgroupId:p.subgroupId,time:0,vacant:true});
     }
   }
 
@@ -3091,6 +3151,9 @@ function dropToTray(trayGroupId){
     p.trayGroupId='__youth__';
   } else {
     p.trayGroupId=trayGroupId||null;
+  }
+  if(pcPrevColId!==TRAY && !p.vacant){
+    markPending({personId:p.id, prevColId:pcPrevColId, prevSubgroupId:pcPrevSubgroupId, prevRole:pcPrevRole, createdVacancyId:pcCreatedVacancyId, replacedVacancy:null});
   }
   dragId=null;
   rebuildAll();
@@ -3664,6 +3727,20 @@ function makeTrayChip(p){
   if(q){
     const match=(p.name||'').toLowerCase().includes(q)||(p.role||'').toLowerCase().includes(q);
     chip.classList.add(match?'search-match':'search-dim');
+  }
+
+  if(isPersonPending(p.id)){
+    chip.classList.add('pending-change');
+    const actions=document.createElement('div');
+    actions.className='pending-actions';
+    const commitBtn=document.createElement('button');
+    commitBtn.className='pending-commit-btn'; commitBtn.textContent='✓'; commitBtn.title='Commit this change';
+    commitBtn.onclick=e=>{ e.stopPropagation(); commitPersonPending(p.id); };
+    const revertBtn=document.createElement('button');
+    revertBtn.className='pending-revert-btn'; revertBtn.textContent='×'; revertBtn.title='Revert this change';
+    revertBtn.onclick=e=>{ e.stopPropagation(); revertPendingForPerson(p.id); };
+    actions.append(commitBtn, revertBtn);
+    chip.appendChild(actions);
   }
 
   const name=document.createElement('div');
@@ -4684,13 +4761,106 @@ function snapshot(){
 }
 function undo(){
   if(!undoStack.length) return;
+  const lenBeforePop=undoStack.length;
   const prev=JSON.parse(undoStack.pop());
   state.columns=prev.columns; state.people=prev.people; state.categories=prev.categories||state.categories; state.trayGroups=prev.trayGroups||state.trayGroups||[];
+  // Drop any pending-change markers tied to the action just undone — they'd
+  // otherwise reference a move that no longer happened.
+  if(pendingChanges.some(pc=>pc.snapAtLen===lenBeforePop)){
+    pendingChanges=pendingChanges.filter(pc=>pc.snapAtLen!==lenBeforePop);
+    savePendingChanges();
+  }
   rebuildAll(); renderFilterPanel();
   const btn=document.getElementById('undo-btn');
   btn.classList.add('flash'); setTimeout(()=>btn.classList.remove('flash'),400);
 }
 document.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.key==='z'){ e.preventDefault(); undo(); } });
+
+// ── COMMIT CHANGE (pending-review workflow) ────────────────────────────────────
+// Drag-and-drop moves are marked "pending" (orange outline + per-tile ✓/×) as a
+// personal review checklist — the underlying data already saves/syncs live, same
+// as before. This is local to this browser only, not synced to other devices.
+let pendingChanges=[];
+(function loadPendingChanges(){
+  try{ pendingChanges=JSON.parse(localStorage.getItem('ward-pending-changes')||'[]'); }
+  catch(e){ pendingChanges=[]; }
+})();
+function savePendingChanges(){ localStorage.setItem('ward-pending-changes', JSON.stringify(pendingChanges)); }
+
+function markPending(entry){
+  entry.cid='pc'+Date.now()+Math.random().toString(36).slice(2,7);
+  entry.snapAtLen=undoStack.length;
+  pendingChanges.push(entry);
+  savePendingChanges();
+  updateCommitBadge();
+}
+function isPersonPending(personId){ return pendingChanges.some(pc=>pc.personId===personId); }
+
+function commitPersonPending(personId){
+  pendingChanges=pendingChanges.filter(pc=>pc.personId!==personId);
+  savePendingChanges();
+  buildLayout(); renderTray(); updateCommitBadge();
+}
+
+function revertPendingForPerson(personId){
+  const entries=pendingChanges.filter(pc=>pc.personId===personId).reverse(); // most recent first
+  const p=state.people.find(x=>x.id===personId);
+  entries.forEach(entry=>{
+    if(entry.createdVacancyId){
+      const idx=state.people.findIndex(x=>x.id===entry.createdVacancyId);
+      if(idx>=0) state.people.splice(idx,1);
+    }
+    if(entry.replacedVacancy){
+      state.people.push({...entry.replacedVacancy});
+    }
+    if(p){
+      p.colId=entry.prevColId; p.subgroupId=entry.prevSubgroupId; p.role=entry.prevRole;
+      if(entry.prevColId!==TRAY) p.trayGroupId=null;
+    }
+  });
+  pendingChanges=pendingChanges.filter(pc=>pc.personId!==personId);
+  savePendingChanges();
+  rebuildAll();
+  updateCommitBadge();
+}
+
+function updateCommitBadge(){
+  const btn=document.getElementById('commit-btn');
+  if(!btn) return;
+  const n=new Set(pendingChanges.map(pc=>pc.personId)).size;
+  btn.querySelector('#commit-count').textContent = n ? ` (${n})` : '';
+  btn.classList.toggle('has-pending', n>0);
+}
+
+function openCommitDialog(){
+  closeModal();
+  const n=new Set(pendingChanges.map(pc=>pc.personId)).size;
+  const ov=document.createElement('div');
+  ov.className='modal-overlay';
+  ov.onclick=e=>{ if(e.target===ov) closeModal(); };
+  ov.innerHTML=`<div class="modal">
+    <h3>Commit all changes?</h3>
+    <p style="font-size:12px;color:var(--ink-3);margin-bottom:14px;line-height:1.5;">
+      ${n ? `${n} pending change${n===1?'':'s'} will be confirmed.` : 'No pending changes right now.'}
+    </p>
+    <div class="modal-btns">
+      <button onclick="closeModal()">Cancel</button>
+      <button onclick="discardAllPending()" style="color:#b03030;border-color:#e0b0b0;">Discard</button>
+      <button class="primary" onclick="commitAllPending()">Yes</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov); modalEl=ov;
+}
+function commitAllPending(){
+  pendingChanges=[];
+  savePendingChanges();
+  closeModal(); buildLayout(); renderTray(); updateCommitBadge();
+}
+function discardAllPending(){
+  const ids=[...new Set(pendingChanges.map(pc=>pc.personId))];
+  ids.forEach(id=>revertPendingForPerson(id));
+  closeModal();
+}
 
 // ── GOOGLE SHEETS SYNC ───────────────────────────────────────────────────────
 // Paste your deployed Apps Script Web App URL here:
@@ -5287,6 +5457,7 @@ renderFdOrgList();
 renderPotentialCallings();
 setTimeout(updateTrayColumns, 100);
 applyZoom();
+updateCommitBadge();
 if(hasSaved) setSaveStatus('Restored ✓');
 
 if(syncEnabled){
