@@ -3011,14 +3011,18 @@ function closeHistoryEntry(p, role, orgName, startDate, endDate){
 // Pending moves update the live tenure display right away (startDate only) but
 // leave the permanent p.history record untouched until the move is committed
 // — a read-only lookup, never mutates history itself.
-function updatePendingLiveDates(p, role, colName){
+function updatePendingLiveDates(p, role, colName, prevRole, prevOrgName){
   if(!role) return;
-  // Match against ANY entry for this calling+org, including the still-open
-  // current one — its closure is deferred until commit, so at this point
-  // it's still marked current even though the person has already moved on.
-  // Without this, moving between two identically-named callings (e.g. one
-  // Primary Teacher slot to another) would look like a brand-new calling
-  // and reset the tenure pill during the pending review window.
+  // Same calling, same org (e.g. one Primary Teacher slot to another) —
+  // nothing about their tenure actually changed, so leave startDate alone.
+  // This doesn't depend on p.history containing a matching entry, since a
+  // calling isn't always recorded there (e.g. assigned through a path that
+  // sets role/org directly) — comparing against what they're moving FROM is
+  // reliable regardless of whether history happens to be complete.
+  if(role===prevRole && (colName||'')===(prevOrgName||'')) return;
+  // Otherwise, fall back to history — resume a past stint at this calling
+  // if there is one (including one that's still technically "current"
+  // because its closure is deferred until commit).
   const match=(p.history||[]).find(h=>h.calling===role && (h.org||'')===(colName||''));
   p.startDate = match ? (match.startDate||p.startDate||new Date().toISOString().slice(0,7)) : new Date().toISOString().slice(0,7);
   p.endDate=null;
@@ -3057,7 +3061,8 @@ function dropOntoOrg(colId, sgId, beforePid){
     // for commit.
     let historyDeferred=null;
     if(p.role){
-      updatePendingLiveDates(p, p.role, orgName);
+      const prevOrgName=(state.columns.find(c=>c.id===prevColId)||{}).name||'';
+      updatePendingLiveDates(p, p.role, orgName, prevRole, prevOrgName);
       historyDeferred={role:p.role, orgName, effectiveDate:new Date().toISOString().slice(0,7)};
     }
     markPending({personId:p.id, prevColId, prevSubgroupId, prevRole, prevStartDate, prevEndDate, createdVacancyId, replacedVacancy:null, historyDeferred});
@@ -3116,7 +3121,8 @@ function dropOntoVacant(vacant, colId){
   let historyDeferred=null;
   if(p.role){
     const orgName=destColV?destColV.name:'';
-    updatePendingLiveDates(p, p.role, orgName);
+    const prevOrgName=(state.columns.find(c=>c.id===prevColId)||{}).name||'';
+    updatePendingLiveDates(p, p.role, orgName, prevRole, prevOrgName);
     historyDeferred={role:p.role, orgName, effectiveDate:new Date().toISOString().slice(0,7)};
   }
   markPending({personId:p.id, prevColId, prevSubgroupId, prevRole, prevStartDate, prevEndDate, createdVacancyId, replacedVacancy, prevNextSiblingId, replacedVacancyNextSiblingId, historyDeferred});
@@ -3135,6 +3141,7 @@ function dropReorder(colId, sgId, beforePid){
   snapshot();
   const pcPrevSubgroupId=p.subgroupId, pcPrevRole=p.role;
   const pcPrevStartDate=p.startDate, pcPrevEndDate=p.endDate;
+  const pcPrevOrgName=(state.columns.find(c=>c.id===p.colId)||{}).name||'';
   const pcPersonIdx0=state.people.findIndex(x=>x.id===dragId);
   const pcPrevNextSiblingId=state.people[pcPersonIdx0+1]?state.people[pcPersonIdx0+1].id:null;
 
@@ -3161,7 +3168,7 @@ function dropReorder(colId, sgId, beforePid){
     if(willMarkPending){
       // Live tenure display updates now; the permanent history record waits
       // for commit.
-      updatePendingLiveDates(p, p.role, orgName);
+      updatePendingLiveDates(p, p.role, orgName, pcPrevRole, pcPrevOrgName);
       historyDeferred={role:p.role, orgName, effectiveDate:new Date().toISOString().slice(0,7)};
     } else {
       resumeOrStartCalling(p, p.role, orgName);
