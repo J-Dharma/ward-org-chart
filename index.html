@@ -2002,7 +2002,7 @@ function toggleAutoSg(on){
 function migrateAllOrgs(){
   // Migrate user-created "Youth" tray groups to __youth__ built-in
   if(state.trayGroups){
-    const youthTg=state.trayGroups.find(g=>g.name==='Youth');
+    const youthTg=state.trayGroups.find(g=>g.name==='Youth'&&g.id!=='__youth__');
     if(youthTg){
       state.people.forEach(p=>{ if(p.trayGroupId===youthTg.id) p.trayGroupId='__youth__'; });
       state.trayGroups=state.trayGroups.filter(g=>g.id!==youthTg.id);
@@ -2010,6 +2010,17 @@ function migrateAllOrgs(){
   }
   // Also backfill any youth people with null trayGroupId
   state.people.forEach(p=>{ if(p.colId===TRAY&&p.ageGroup==='Youth'&&!p.trayGroupId) p.trayGroupId='__youth__'; });
+
+  // Free Agents and Youth are collapsible/reorderable like any custom tray
+  // group, but can't be renamed or deleted — insert them once, at the front,
+  // if a saved state predates this and doesn't have them yet.
+  if(!state.trayGroups) state.trayGroups=[];
+  if(!state.trayGroups.some(g=>g.id==='__youth__')){
+    state.trayGroups.unshift({id:'__youth__', name:'Youth', isDefault:true});
+  }
+  if(!state.trayGroups.some(g=>g.id==='__freeagents__')){
+    state.trayGroups.unshift({id:'__freeagents__', name:'Free Agents', isDefault:true});
+  }
   const OLD_MALE   = ['Bishopric','Elders Quorum','Young Men'];
   const OLD_FEMALE = ['Relief Society','Young Women'];
   state.columns.forEach(col=>{
@@ -3396,20 +3407,8 @@ function renderTrayFilterPanel(){
   // Separator
   const sep=document.createElement('div'); sep.style.cssText='height:1px;background:var(--line);margin:4px 0;'; groups.appendChild(sep);
 
-  // Free Agents
-  const ugRow=document.createElement('div');
-  ugRow.style.cssText='display:flex;align-items:center;gap:6px;padding:2px 0;cursor:pointer;';
-  const ugCb=document.createElement('input'); ugCb.type='checkbox'; ugCb.checked=trayGroupFilter.has('ungrouped');
-  ugCb.style.accentColor='var(--navy)';
-  ugCb.onchange=()=>{
-    if(ugCb.checked) trayGroupFilter.add('ungrouped');
-    else trayGroupFilter.delete('ungrouped');
-    renderTray(); renderTrayFilterPanel();
-  };
-  const ugLbl=document.createElement('span'); ugLbl.style.cssText='font-size:11px;color:var(--ink-2);'; ugLbl.textContent='Free Agents';
-  ugRow.append(ugCb,ugLbl);
-  groups.appendChild(ugRow);
-
+  // Free Agents and Youth are entries in state.trayGroups (see
+  // migrateAllOrgs), so this loop lists them alongside custom groups.
   (state.trayGroups||[]).forEach(tg=>{
     const row=document.createElement('div');
     row.style.cssText='display:flex;align-items:center;gap:6px;padding:2px 0;cursor:pointer;';
@@ -3465,7 +3464,6 @@ function renderTray(){
   scroll.innerHTML='';
 
   const showAll=trayGroupFilter.size===0;
-  const showUngrouped=showAll||trayGroupFilter.has('ungrouped');
 
   function traySort(a,b){
     if(traySortBy==='first') return (a.name.split(' ')[0]||'').localeCompare(b.name.split(' ')[0]||'');
@@ -3481,35 +3479,53 @@ function renderTray(){
     ].filter(g=>g.people.length>0);
   }
 
-  const sections=[
-    ...(showUngrouped?[{id:null, name:'', people:allPeople.filter(p=>!p.trayGroupId&&p.trayGroupId!=='__youth__'&&p.ageGroup!=='Youth'), isUngrouped:true}]:[]),
-    ...(state.trayGroups||[])
-      .filter(tg=>showAll||trayGroupFilter.has(tg.id))
-      .map((tg)=>({id:tg.id, name:tg.name, tg, tgi:state.trayGroups.indexOf(tg),
-        people:allPeople.filter(p=>p.trayGroupId===tg.id).sort(traySort),
-        isUngrouped:false}))
-  ];
+  // Free Agents and Youth are entries in state.trayGroups too (see
+  // migrateAllOrgs), so every section — default or custom — goes through the
+  // same reorder/collapse/render path. Only their person-filter and their
+  // lack of rename/delete are special-cased.
+  function peopleForGroup(tgId){
+    if(tgId==='__freeagents__') return allPeople.filter(p=>!p.trayGroupId&&p.ageGroup!=='Youth');
+    if(tgId==='__youth__') return allPeople.filter(p=>p.trayGroupId==='__youth__'||(!p.trayGroupId&&p.ageGroup==='Youth'));
+    return allPeople.filter(p=>p.trayGroupId===tgId);
+  }
+  const sections=(state.trayGroups||[])
+    .filter(tg=>showAll||trayGroupFilter.has(tg.id))
+    .map(tg=>({id:tg.id, name:tg.name, tg, tgi:state.trayGroups.indexOf(tg),
+      people:peopleForGroup(tg.id).sort(traySort),
+      isDefault:!!tg.isDefault}));
 
   sections.forEach((sec, secIdx)=>{
     const section=document.createElement('div');
-    section.className='tray-section'+(!sec.isUngrouped&&sec.tg&&sec.tg.collapsed?' collapsed':'');
+    section.className='tray-section'+(sec.tg.collapsed?' collapsed':'');
 
-    // Add drop zone before named groups; build section header for all sections
-    if(!sec.isUngrouped){
-      scroll.appendChild(makeTrayGroupDropZone(sec.tgi));
+    scroll.appendChild(makeTrayGroupDropZone(sec.tgi));
 
-      const head=document.createElement('div');
-      head.className='tray-section-head';
-      head.draggable=true;
+    const head=document.createElement('div');
+    head.className='tray-section-head';
+    head.draggable=true;
 
-      const dragH=document.createElement('span');
-      dragH.textContent='⠿';
-      dragH.style.cssText='color:var(--ink-4);font-size:11px;cursor:grab;flex-shrink:0;';
+    const dragH=document.createElement('span');
+    dragH.textContent='⠿';
+    dragH.style.cssText='color:var(--ink-4);font-size:11px;cursor:grab;flex-shrink:0;';
 
-      const chevron=document.createElement('span');
-      chevron.className='tray-section-chevron';
-      chevron.textContent='▾';
+    const chevron=document.createElement('span');
+    chevron.className='tray-section-chevron';
+    chevron.textContent='▾';
 
+    const line=document.createElement('div');
+    line.className='sg-head-line';
+
+    const cnt=document.createElement('span');
+    cnt.style.cssText='font-size:10px;color:var(--ink-3);flex-shrink:0;font-variant-numeric:tabular-nums;';
+    cnt.textContent=sec.people.length;
+
+    head.append(dragH, chevron);
+    if(sec.isDefault){
+      const label=document.createElement('span');
+      label.className='sg-head-label';
+      label.textContent=sec.name;
+      head.appendChild(label);
+    } else {
       const nameInp=document.createElement('input');
       nameInp.type='text'; nameInp.value=sec.tg.name;
       nameInp.style.cssText='font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;background:transparent;border:1px solid transparent;border-radius:3px;color:var(--navy);padding:1px 4px;outline:none;min-width:30px;max-width:140px;font-family:inherit;flex-shrink:0;';
@@ -3517,109 +3533,44 @@ function renderTray(){
       nameInp.addEventListener('blur',()=>{ nameInp.style.borderColor='transparent'; nameInp.style.background='transparent'; sec.tg.name=nameInp.value.trim()||sec.tg.name; nameInp.value=sec.tg.name; scheduleSave(); });
       nameInp.addEventListener('keydown',e=>{ if(e.key==='Enter') nameInp.blur(); e.stopPropagation(); });
       nameInp.addEventListener('click',e=>e.stopPropagation());
+      head.appendChild(nameInp);
+    }
+    head.append(line, cnt);
 
-      const line=document.createElement('div');
-      line.className='sg-head-line';
-
-      const cnt=document.createElement('span');
-      cnt.style.cssText='font-size:10px;color:var(--ink-3);flex-shrink:0;font-variant-numeric:tabular-nums;';
-      cnt.textContent=sec.people.length;
-
-      const del=document.createElement('span');
+    let del=null;
+    if(!sec.isDefault){
+      del=document.createElement('span');
       del.textContent='×';
       del.style.cssText='color:var(--ink-4);cursor:pointer;font-size:13px;flex-shrink:0;padding:0 3px;line-height:1;border-radius:2px;';
       del.onclick=e=>{ e.stopPropagation(); snapshot(); state.people.forEach(p=>{ if(p.trayGroupId===sec.id) p.trayGroupId=null; }); state.trayGroups.splice(sec.tgi,1); renderTray(); scheduleSave(); };
-
-      head.append(dragH, chevron, nameInp, line, cnt, del);
-      head.addEventListener('click',e=>{ if(e.target===nameInp||e.target===del) return; sec.tg.collapsed=!sec.tg.collapsed; section.classList.toggle('collapsed',sec.tg.collapsed); scheduleSave(); });
-      head.addEventListener('dragstart',e=>{ tgDragIdx=sec.tgi; setTimeout(()=>head.style.opacity='0.4',0); e.stopPropagation(); });
-      head.addEventListener('dragend',()=>{ tgDragIdx=null; head.style.opacity=''; renderTray(); });
-
-      section.appendChild(head);
-    } else {
-      // Free Agents (ungrouped) section: collapsible but no drag/rename
-      const head=document.createElement('div');
-      head.className='tray-section-head';
-
-      const chevron=document.createElement('span');
-      chevron.className='tray-section-chevron';
-      chevron.textContent='▾';
-
-      const label=document.createElement('span');
-      label.className='sg-head-label';
-      label.textContent='Free Agents';
-
-      const line=document.createElement('div');
-      line.className='sg-head-line';
-
-      const cnt=document.createElement('span');
-      cnt.style.cssText='font-size:10px;color:var(--ink-3);flex-shrink:0;font-variant-numeric:tabular-nums;';
-      cnt.textContent=sec.people.length;
-
-      head.append(chevron, label, line, cnt);
-      head.addEventListener('click',()=>{ 
-        section.classList.toggle('collapsed');
-        scheduleSave(); 
-      });
-
-      section.appendChild(head);
+      head.appendChild(del);
     }
+
+    head.addEventListener('click',e=>{ if(e.target.tagName==='INPUT'||e.target===del) return; sec.tg.collapsed=!sec.tg.collapsed; section.classList.toggle('collapsed',sec.tg.collapsed); scheduleSave(); });
+    head.addEventListener('dragstart',e=>{ tgDragIdx=sec.tgi; setTimeout(()=>head.style.opacity='0.4',0); e.stopPropagation(); });
+    head.addEventListener('dragend',()=>{ tgDragIdx=null; head.style.opacity=''; renderTray(); });
+
+    section.appendChild(head);
+
+    // Free Agents membership is stored on people as trayGroupId===null, so
+    // drops onto that section need to write null, not the literal id string.
+    const dropTargetId=sec.id==='__freeagents__'?null:sec.id;
 
     const grid=document.createElement('div');
     grid.className='tray-chip-grid';
-    grid.appendChild(makeTrayDropZone(sec.id, null));
+    grid.appendChild(makeTrayDropZone(dropTargetId, null));
 
-    // Build chip grid with gender sub-grouping
-    if(sec.isUngrouped){
-      // Free Agents: also show Youth sub-section
-      const youthPeople=allPeople.filter(p=>p.trayGroupId==='__youth__'||(!p.trayGroupId&&p.ageGroup==='Youth')).sort(traySort);
-      const adultGroups=genderSplit(sec.people);
-
-      adultGroups.forEach(g=>{
-        if(g.label){
-          const lbl=document.createElement('div'); lbl.className='tray-gender-divider'; lbl.textContent=g.label; grid.appendChild(lbl);
-        }
-        const inner=document.createElement('div'); inner.className='tray-chip-grid-inner'; inner.dataset.sgId=sec.id||'ungrouped';
-        g.people.forEach(p=>inner.appendChild(makeTrayChip(p)));
-        grid.appendChild(inner);
-      });
-
-      if(youthPeople.length){
-        const yHead=document.createElement('div');
-        yHead.className='tray-section-head';
-        yHead.style.cssText='border-top:1px solid var(--line-2);';
-        const yChev=document.createElement('span'); yChev.className='tray-section-chevron'; yChev.textContent='▾';
-        const yLbl=document.createElement('span'); yLbl.className='sg-head-label'; yLbl.textContent='Youth';
-        const yLine=document.createElement('div'); yLine.className='sg-head-line';
-        const yCnt=document.createElement('span'); yCnt.style.cssText='font-size:10px;color:var(--ink-3);flex-shrink:0;'; yCnt.textContent=youthPeople.length;
-        yHead.append(yChev,yLbl,yLine,yCnt);
-        yHead.addEventListener('click',()=>{ yHead.nextElementSibling&&yHead.nextElementSibling.classList.toggle('collapsed'); });
-        grid.appendChild(yHead);
-        // Gender sub-grouping within Youth — same as free agents
-        const youthGroups=genderSplit(youthPeople);
-        youthGroups.forEach(g=>{
-          if(g.label&&youthGroups.length>1){
-            const lbl=document.createElement('div'); lbl.className='tray-gender-divider'; lbl.textContent=g.label; grid.appendChild(lbl);
-          }
-          const yInner=document.createElement('div'); yInner.className='tray-chip-grid-inner'; yInner.dataset.sgId='__youth__';
-          g.people.forEach(p=>yInner.appendChild(makeTrayChip(p)));
-          grid.appendChild(yInner);
-        });
+    const groups=genderSplit(sec.people);
+    groups.forEach(g=>{
+      if(g.label&&groups.length>1){
+        const lbl=document.createElement('div'); lbl.className='tray-gender-divider'; lbl.textContent=g.label; grid.appendChild(lbl);
       }
-    } else {
-      // Named group: gender sub-grouping
-      const groups=genderSplit(sec.people);
-      groups.forEach(g=>{
-        if(g.label&&groups.length>1){
-          const lbl=document.createElement('div'); lbl.className='tray-gender-divider'; lbl.textContent=g.label; grid.appendChild(lbl);
-        }
-        const inner=document.createElement('div'); inner.className='tray-chip-grid-inner'; inner.dataset.sgId=sec.id||'ungrouped';
-        g.people.forEach(p=>inner.appendChild(makeTrayChip(p)));
-        grid.appendChild(inner);
-      });
-    }
+      const inner=document.createElement('div'); inner.className='tray-chip-grid-inner'; inner.dataset.sgId=sec.id;
+      g.people.forEach(p=>inner.appendChild(makeTrayChip(p)));
+      grid.appendChild(inner);
+    });
 
-    grid.appendChild(makeTrayDropZone(sec.id, null));
+    grid.appendChild(makeTrayDropZone(dropTargetId, null));
     section.appendChild(grid);
     scroll.appendChild(section);
   });
