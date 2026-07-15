@@ -610,6 +610,24 @@ body.hide-tenure .row-multi { margin-left: auto; }
 
 #commit-btn #commit-count { font-weight: 700; }
 #commit-btn.has-pending { background: rgba(255,149,0,0.16); border-color: rgba(255,149,0,0.45); color: #fff; }
+
+#pending-banner {
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  padding: 7px 16px;
+  background: #ff9500;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+.pending-banner-btns { display: flex; gap: 8px; flex-shrink: 0; }
+.pending-banner-btns button {
+  font-size: 11px; font-weight: 600; padding: 4px 12px;
+  border-radius: 5px; border: 1px solid rgba(255,255,255,0.5);
+  background: rgba(255,255,255,0.15); color: #fff; cursor: pointer;
+  font-family: inherit; transition: background 0.12s;
+}
+.pending-banner-btns button:hover { background: rgba(255,255,255,0.3); }
 .person-row.vacant-row .person-name {
   color: var(--vac) !important; font-weight: 700 !important;
   letter-spacing: 0.05em; font-size: calc(var(--row-font) - 1.5px);
@@ -1235,6 +1253,14 @@ body.hide-tenure .row-multi { margin-left: auto; }
       </div>
     </div>
     <span id="save-status"></span>
+  </div>
+</div>
+
+<div id="pending-banner" style="display:none;">
+  <span id="pending-banner-text"></span>
+  <div class="pending-banner-btns">
+    <button onclick="openCommitDialog()">Review</button>
+    <button onclick="discardAllPendingWithConfirm()">Discard All</button>
   </div>
 </div>
 
@@ -4826,10 +4852,17 @@ function revertPendingForPerson(personId){
 
 function updateCommitBadge(){
   const btn=document.getElementById('commit-btn');
-  if(!btn) return;
   const n=new Set(pendingChanges.map(pc=>pc.personId)).size;
-  btn.querySelector('#commit-count').textContent = n ? ` (${n})` : '';
-  btn.classList.toggle('has-pending', n>0);
+  if(btn){
+    btn.querySelector('#commit-count').textContent = n ? ` (${n})` : '';
+    btn.classList.toggle('has-pending', n>0);
+  }
+  const banner=document.getElementById('pending-banner');
+  if(banner){
+    banner.style.display = n ? 'flex' : 'none';
+    const text=document.getElementById('pending-banner-text');
+    if(text) text.textContent = `⚠ ${n} uncommitted change${n===1?'':'s'} — already live, but still marked for review on this device.`;
+  }
 }
 
 function openCommitDialog(){
@@ -4861,6 +4894,21 @@ function discardAllPending(){
   ids.forEach(id=>revertPendingForPerson(id));
   closeModal();
 }
+function discardAllPendingWithConfirm(){
+  const n=new Set(pendingChanges.map(pc=>pc.personId)).size;
+  if(!n) return;
+  if(confirm(`Discard ${n} pending change${n===1?'':'s'}? Each one will be reverted back to how it was before.`)) discardAllPending();
+}
+
+// Warn before leaving the tab with uncommitted changes — the data itself is
+// already saved, but the pending markers (and the review they're flagging)
+// are local to this browser and would otherwise just be left behind.
+window.addEventListener('beforeunload', e=>{
+  if(pendingChanges.length){
+    e.preventDefault();
+    e.returnValue='';
+  }
+});
 
 // ── GOOGLE SHEETS SYNC ───────────────────────────────────────────────────────
 // Paste your deployed Apps Script Web App URL here:
