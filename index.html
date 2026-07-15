@@ -3013,7 +3013,13 @@ function closeHistoryEntry(p, role, orgName, startDate, endDate){
 // — a read-only lookup, never mutates history itself.
 function updatePendingLiveDates(p, role, colName){
   if(!role) return;
-  const match=(p.history||[]).find(h=>!h.current && h.calling===role && (h.org||'')===(colName||''));
+  // Match against ANY entry for this calling+org, including the still-open
+  // current one — its closure is deferred until commit, so at this point
+  // it's still marked current even though the person has already moved on.
+  // Without this, moving between two identically-named callings (e.g. one
+  // Primary Teacher slot to another) would look like a brand-new calling
+  // and reset the tenure pill during the pending review window.
+  const match=(p.history||[]).find(h=>h.calling===role && (h.org||'')===(colName||''));
   p.startDate = match ? (match.startDate||p.startDate||new Date().toISOString().slice(0,7)) : new Date().toISOString().slice(0,7);
   p.endDate=null;
 }
