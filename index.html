@@ -613,21 +613,14 @@ body.hide-tenure .row-multi { margin-left: auto; }
 
 #pending-banner {
   flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center; gap: 14px;
+  display: flex; align-items: center; justify-content: center;
   padding: 7px 16px;
   background: #ff9500;
   color: #fff;
   font-size: 12px;
   font-weight: 600;
+  text-align: center;
 }
-.pending-banner-btns { display: flex; gap: 8px; flex-shrink: 0; }
-.pending-banner-btns button {
-  font-size: 11px; font-weight: 600; padding: 4px 12px;
-  border-radius: 5px; border: 1px solid rgba(255,255,255,0.5);
-  background: rgba(255,255,255,0.15); color: #fff; cursor: pointer;
-  font-family: inherit; transition: background 0.12s;
-}
-.pending-banner-btns button:hover { background: rgba(255,255,255,0.3); }
 .person-row.vacant-row .person-name {
   color: var(--vac) !important; font-weight: 700 !important;
   letter-spacing: 0.05em; font-size: calc(var(--row-font) - 1.5px);
@@ -1157,6 +1150,12 @@ body.hide-tenure .row-multi { margin-left: auto; }
 
   /* Bands: slightly larger tap targets */
   .band-head { padding: 12px 14px; }
+
+  /* Commit-change ✓/× — bigger touch targets on mobile */
+  .pending-commit-btn, .pending-revert-btn {
+    width: 26px; height: 26px; font-size: 15px;
+  }
+  .pending-actions { gap: 5px; margin-right: 6px; }
 }
 </style>
 </head>
@@ -1258,10 +1257,6 @@ body.hide-tenure .row-multi { margin-left: auto; }
 
 <div id="pending-banner" style="display:none;">
   <span id="pending-banner-text"></span>
-  <div class="pending-banner-btns">
-    <button onclick="openCommitDialog()">Review</button>
-    <button onclick="discardAllPendingWithConfirm()">Discard All</button>
-  </div>
 </div>
 
 <div id="jumpnav"></div>
@@ -5016,11 +5011,6 @@ function discardAllPending(){
   const ids=[...new Set(state.pendingChanges.map(pc=>pc.personId))];
   ids.forEach(id=>revertPendingForPerson(id));
   closeModal();
-}
-function discardAllPendingWithConfirm(){
-  const n=new Set(state.pendingChanges.map(pc=>pc.personId)).size;
-  if(!n) return;
-  if(confirm(`Discard ${n} pending change${n===1?'':'s'}? Each one will be reverted back to how it was before.`)) discardAllPending();
 }
 
 // Warn before leaving the tab with uncommitted changes.
