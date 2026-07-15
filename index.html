@@ -100,6 +100,8 @@ body.hide-tenure .row-multi { margin-left: auto; }
   gap: 8px;
   padding: 0 16px;
   z-index: 50;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 .tb-title {
   font-size: 13px;
@@ -364,7 +366,8 @@ body.hide-tenure .row-multi { margin-left: auto; }
 #body-wrap {
   flex: 1;
   display: flex;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   min-height: 0;
   position: relative;
 }
@@ -673,10 +676,10 @@ body.hide-tenure .row-multi { margin-left: auto; }
 .pc-linked-org { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
 .pc-linked-role { font-size: 12px; color: var(--ink); font-weight: 500; }
 .row-del {
-  font-size: 12px; color: var(--ink-3); cursor: pointer;
-  opacity: 0; padding: 0 3px; border-radius: 2px; flex-shrink: 0; margin-left: 4px; line-height: 1;
+  font-size: 14px; color: var(--ink-3); cursor: pointer;
+  opacity: 0.4; padding: 3px 7px; border-radius: 3px; flex-shrink: 0; margin-left: 4px; line-height: 1;
 }
-.person-row:hover .row-del { opacity: 1; }
+.row-del:hover { opacity: 1; background: rgba(0,0,0,0.08); }
 
 .person-row.indented { padding-left: 24px; }
 .person-row.indented::before {
@@ -791,11 +794,16 @@ body.hide-tenure .row-multi { margin-left: auto; }
 .tray-section.collapsed .tray-section-drop { display:none; }
 .tray-chip-grid { }
 .tray-chip-grid-inner {
-  display: flex;
-  flex-direction: column;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  /* height set dynamically by updateTrayColumns so columns flow top-to-bottom */
+  /* Native CSS multi-column layout — no JS height measurement needed, so it
+     can't drift out of sync with the real (possibly zoomed/rescaled) chip
+     height the way a frozen, JS-measured flex-wrap height can. That mismatch
+     is what silently hid tray members off the bottom of a column before. */
+  column-width: 128px;
+  column-gap: 0;
+}
+.tray-chip-grid-inner .tray-chip {
+  width: 100%;
+  break-inside: avoid;
 }
 .tray-chip {
   display:flex; align-items:center; gap:4px; padding:6px 12px 6px 10px;
@@ -1130,6 +1138,7 @@ body.hide-tenure .row-multi { margin-left: auto; }
   .tray-chip-grid-inner {
     display: block !important;
     column-count: 3 !important;
+    column-width: auto !important;
     column-gap: 0 !important;
     height: auto !important;
   }
@@ -3259,6 +3268,19 @@ let trayMode='flat';
 let traySortBy='last'; // 'last'|'first' — sort by last or first name
 let trayResizing=false, trayResizeStartX=0, trayResizeStartW=0;
 
+// Tray width can never exceed what actually fits — a width saved on a wider
+// screen (or a browser profile moved to a narrower/rescaled display, e.g. a
+// TV connected wirelessly) would otherwise overflow #body-wrap and get
+// silently clipped with no way to scroll to the hidden columns.
+function clampTrayWidth(){
+  const pane=document.getElementById('tray-pane');
+  if(!pane||isMobileLayout()) return;
+  const cur=pane.getBoundingClientRect().width;
+  const maxW=Math.max(180, window.innerWidth-260); // leave room for the org list
+  if(cur>maxW) pane.style.width=maxW+'px';
+}
+window.addEventListener('resize', clampTrayWidth);
+
 // Wire tray resize handle after DOM ready
 setTimeout(()=>{
   const handle=document.getElementById('tray-resize-handle');
@@ -3266,7 +3288,7 @@ setTimeout(()=>{
   if(!handle||!pane) return;
   // Restore last resized width (per-device preference, not synced ward data)
   const savedW=parseInt(localStorage.getItem('ward-tray-width')||'','10');
-  if(savedW && !isMobileLayout()){ pane.style.width=savedW+'px'; updateTrayColumns(); }
+  if(savedW && !isMobileLayout()){ pane.style.width=savedW+'px'; clampTrayWidth(); updateTrayColumns(); }
   handle.addEventListener('mousedown',e=>{
     trayResizing=true;
     trayResizeStartX=e.clientX;
@@ -3784,23 +3806,9 @@ function makeTrayGroupDropZone(insertBeforeIdx){
 }
 
 function updateTrayColumns(){
-  // Mobile uses a native CSS column-count layout (see mobile stylesheet) that
-  // needs no measurement and can't drift out of sync with real chip height.
-  if(isMobileLayout()) return;
-  const pane=document.getElementById('tray-pane');
-  if(!pane||!trayOpen) return;
-  const w=pane.offsetWidth;
-  const cols=w>=400?3:w>=220?2:1;
-  document.querySelectorAll('.tray-chip-grid-inner').forEach(inner=>{
-    const chips=inner.querySelectorAll('.tray-chip');
-    if(!chips.length){ inner.style.height=''; return; }
-    // Each chip is a fixed-width column cell; flow them top-to-bottom then wrap.
-    chips.forEach(c=>{ c.style.width=(100/cols).toFixed(3)+'%'; c.style.boxSizing='border-box'; c.style.display='block'; });
-    // Measure one chip's height, set container height so flex-wrap breaks into `cols` columns.
-    const chipH=chips[0].offsetHeight||30;
-    const perCol=Math.ceil(chips.length/cols);
-    inner.style.height=(perCol*chipH)+'px';
-  });
+  // Both mobile and desktop now use native CSS column-width/column-count
+  // layout (see stylesheet) — no measurement needed, so this is a no-op kept
+  // only so existing call sites don't need to change.
 }
 
 
