@@ -2945,8 +2945,11 @@ function dropOntoVacant(vacant, colId){
   }
   snapshot();
 
-  const movingBetweenCols=(p.colId!==colId && p.colId!==TRAY);
-  if(movingBetweenCols && p.role && !p.vacant){
+  // Leaving behind an occupied calling — same org or different — should
+  // always open a vacancy there. (Coming from the No Calling tray doesn't,
+  // since there's no prior calling to vacate.)
+  const leavingCalling=(p.colId!==TRAY && p.role && !p.vacant);
+  if(leavingCalling){
     const peers=state.people.filter(x=>x.colId===p.colId);
     const srcPeer=peers[dragSrcIdx]||null;
     const ins=srcPeer?state.people.indexOf(srcPeer):state.people.length;
