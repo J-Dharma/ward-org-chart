@@ -5021,14 +5021,6 @@ function discardAllPending(){
   closeModal();
 }
 
-// Warn before leaving the tab with uncommitted changes.
-window.addEventListener('beforeunload', e=>{
-  if(state.pendingChanges.length){
-    e.preventDefault();
-    e.returnValue='';
-  }
-});
-
 // ── GOOGLE SHEETS SYNC ───────────────────────────────────────────────────────
 // Paste your deployed Apps Script Web App URL here:
 const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbyb2FnJTcQaqMx7EpbCwp8c7eKqPs6K0HG1skoLiCFN4Pwpmj-ukch26nv5kGptJz40MA/exec';
