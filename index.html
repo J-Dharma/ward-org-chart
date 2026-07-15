@@ -1201,6 +1201,7 @@ body.hide-tenure .row-multi { margin-left: auto; }
           <input type="file" id="json-import" accept=".json" style="display:none" onchange="importJSON(this)" />
           <div style="height:1px;background:var(--line);margin:4px 0;"></div>
           <button class="overflow-item" onclick="exportCSV();toggleOverflowMenu()">↓ Export CSV (callings list)</button>
+          <button class="overflow-item" onclick="exportChangeLog();toggleOverflowMenu()">↓ Download Change Log (CSV)</button>
           <button class="overflow-item" onclick="document.getElementById('csv-import').click();toggleOverflowMenu()">↑ Merge CSV</button>
           <input type="file" id="csv-import" accept=".csv" style="display:none" onchange="importCSV(this)" />
           <div style="height:1px;background:var(--line);margin:4px 0;"></div>
@@ -5050,6 +5051,26 @@ function exportCSV(){
   });
   const csv=rows.map(r=>r.join(',')).join('\n');
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download='ward_callings.csv'; a.click();
+}
+
+// Builds an entered/exited event log from each person's calling history
+// (state.people[].history — already tracked whenever someone is assigned,
+// moved, or released from a calling) and offers it as a CSV download.
+function exportChangeLog(){
+  const csvField=v=>`"${String(v||'').replace(/"/g,'""')}"`;
+  const events=[];
+  state.people.forEach(p=>{
+    (p.history||[]).forEach(h=>{
+      if(h.startDate) events.push({date:h.startDate, action:'Entered', name:p.name, calling:h.calling||'', org:h.org||''});
+      if(h.endDate && !h.current) events.push({date:h.endDate, action:'Exited', name:p.name, calling:h.calling||'', org:h.org||''});
+    });
+  });
+  events.sort((a,b)=> (b.date||'').localeCompare(a.date||'') || a.name.localeCompare(b.name));
+
+  const rows=[['Date','Action','Person','Calling','Organization']];
+  events.forEach(e=>rows.push([csvField(e.date),csvField(e.action),csvField(e.name),csvField(e.calling),csvField(e.org)]));
+  const csv=rows.map(r=>r.join(',')).join('\n');
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download='ward_calling_change_log.csv'; a.click();
 }
 
 function exportJSON(){
