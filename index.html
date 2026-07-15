@@ -2938,12 +2938,13 @@ function warnGenderMismatch(col){
 }
 // Resume an existing history entry if the same calling+org is found,
 // otherwise start a new one. Called whenever a person is placed into a calling.
-function resumeOrStartCalling(p, role, colName){
+function resumeOrStartCalling(p, role, colName, effectiveDate){
   if(!role) return;
   if(!p.history) p.history=[];
+  const eff=effectiveDate||new Date().toISOString().slice(0,7);
 
   // Mark any existing "current" entry as ended
-  p.history.forEach(h=>{ if(h.current){ h.current=false; if(!h.endDate) h.endDate=new Date().toISOString().slice(0,7); } });
+  p.history.forEach(h=>{ if(h.current){ h.current=false; if(!h.endDate) h.endDate=eff; } });
 
   // Look for a matching past entry (same calling + org)
   const match=p.history.find(h=>
@@ -2960,7 +2961,7 @@ function resumeOrStartCalling(p, role, colName){
     match.endDate=null;
   } else {
     // New calling: set startDate to today if not already set
-    if(!p.startDate) p.startDate=new Date().toISOString().slice(0,7);
+    if(!p.startDate) p.startDate=eff;
     p.endDate=null;
     p.history.unshift({
       calling:role,
@@ -2973,6 +2974,34 @@ function resumeOrStartCalling(p, role, colName){
   }
 }
 
+// Close out a calling's history entry using dates captured at drag time
+// (not "now") so a deferred/committed-later history update reflects when the
+// move actually happened, not when it was finally reviewed.
+function calcTenureFromDates(startDate, endDate){
+  if(!startDate) return 0;
+  const start=new Date(startDate);
+  const end=endDate?new Date(endDate):new Date();
+  return Math.max(0, (end-start)/(1000*60*60*24*365.25));
+}
+function closeHistoryEntry(p, role, orgName, startDate, endDate){
+  if(!p.history) p.history=[];
+  p.history.forEach(h=>{ if(h.current){ h.current=false; if(!h.endDate) h.endDate=endDate; h.years=calcTenureFromDates(h.startDate,h.endDate).toFixed(1); } });
+  const alreadyRecorded=p.history.some(h=>h.calling===role&&(h.org||'')===(orgName||'')&&!h.current&&h.endDate===endDate);
+  if(!alreadyRecorded){
+    p.history.unshift({calling:role, org:orgName||'', years:calcTenureFromDates(startDate,endDate).toFixed(1), current:false, startDate:startDate||null, endDate});
+  }
+}
+
+// Pending moves update the live tenure display right away (startDate only) but
+// leave the permanent p.history record untouched until the move is committed
+// — a read-only lookup, never mutates history itself.
+function updatePendingLiveDates(p, role, colName){
+  if(!role) return;
+  const match=(p.history||[]).find(h=>!h.current && h.calling===role && (h.org||'')===(colName||''));
+  p.startDate = match ? (match.startDate||p.startDate||new Date().toISOString().slice(0,7)) : new Date().toISOString().slice(0,7);
+  p.endDate=null;
+}
+
 function dropOntoOrg(colId, sgId, beforePid){
   if(!dragId) return;
   const p=state.people.find(x=>x.id===dragId);
@@ -2983,6 +3012,7 @@ function dropOntoOrg(colId, sgId, beforePid){
   }
   snapshot();
   const prevColId=p.colId, prevSubgroupId=p.subgroupId, prevRole=p.role;
+  const prevStartDate=p.startDate, prevEndDate=p.endDate;
   const orgActuallyChanged=(p.colId!==colId);
 
   const movingBetweenCols=(p.colId!==colId && p.colId!==TRAY);
@@ -2998,10 +3028,20 @@ function dropOntoOrg(colId, sgId, beforePid){
   p.colId=colId;
   p.subgroupId=sgId||null;
   const destCol=state.columns.find(c=>c.id===colId);
+  const orgName=destCol?destCol.name:'';
   // role stays as-is when moving between orgs; resume/start based on current role
-  resumeOrStartCalling(p, p.role, destCol?destCol.name:'');
   if(!p.vacant && orgActuallyChanged){
-    markPending({personId:p.id, prevColId, prevSubgroupId, prevRole, createdVacancyId, replacedVacancy:null});
+    // Live tenure display updates now; the permanent history record waits
+    // for commit.
+    let historyDeferred=null;
+    if(p.role){
+      updatePendingLiveDates(p, p.role, orgName);
+      historyDeferred={role:p.role, orgName, effectiveDate:new Date().toISOString().slice(0,7)};
+    }
+    markPending({personId:p.id, prevColId, prevSubgroupId, prevRole, prevStartDate, prevEndDate, createdVacancyId, replacedVacancy:null, historyDeferred});
+  } else {
+    // Not going through the pending workflow — update history immediately.
+    resumeOrStartCalling(p, p.role, orgName);
   }
   dragId=null;
   rebuildAll();
@@ -3017,6 +3057,7 @@ function dropOntoVacant(vacant, colId){
   }
   snapshot();
   const prevColId=p.colId, prevSubgroupId=p.subgroupId, prevRole=p.role;
+  const prevStartDate=p.startDate, prevEndDate=p.endDate;
   const replacedVacancy={...vacant};
   // Remember who p and the vacant slot sat next to, so a later revert can
   // restore both to their original positions instead of just tacking them
@@ -3048,8 +3089,15 @@ function dropOntoVacant(vacant, colId){
   p.colId=colId;
   p.subgroupId=vacant.subgroupId||null;
   const destColV=state.columns.find(c=>c.id===colId);
-  if(p.role) resumeOrStartCalling(p, p.role, destColV?destColV.name:'');
-  markPending({personId:p.id, prevColId, prevSubgroupId, prevRole, createdVacancyId, replacedVacancy, prevNextSiblingId, replacedVacancyNextSiblingId});
+  // Update the live tenure display now, but leave the permanent history
+  // record deferred until this move is actually committed.
+  let historyDeferred=null;
+  if(p.role){
+    const orgName=destColV?destColV.name:'';
+    updatePendingLiveDates(p, p.role, orgName);
+    historyDeferred={role:p.role, orgName, effectiveDate:new Date().toISOString().slice(0,7)};
+  }
+  markPending({personId:p.id, prevColId, prevSubgroupId, prevRole, prevStartDate, prevEndDate, createdVacancyId, replacedVacancy, prevNextSiblingId, replacedVacancyNextSiblingId, historyDeferred});
   dragId=null;
   rebuildAll();
 }
@@ -3064,10 +3112,12 @@ function dropReorder(colId, sgId, beforePid){
   }
   snapshot();
   const pcPrevSubgroupId=p.subgroupId, pcPrevRole=p.role;
+  const pcPrevStartDate=p.startDate, pcPrevEndDate=p.endDate;
   const pcPersonIdx0=state.people.findIndex(x=>x.id===dragId);
   const pcPrevNextSiblingId=state.people[pcPersonIdx0+1]?state.people[pcPersonIdx0+1].id:null;
 
   const sameCol=p.colId===colId;
+  const willMarkPending=(!sameCol && !p.vacant);
   let createdVacancyId=null;
   if(!sameCol && p.colId!==TRAY && p.role && !p.vacant){
     const peers=state.people.filter(x=>x.colId===p.colId);
@@ -3082,9 +3132,18 @@ function dropReorder(colId, sgId, beforePid){
   const prevColId=p.colId;
   p.colId=colId; p.subgroupId=sgId!==undefined?sgId:null;
   // resume or start calling only when changing org
-  if(prevColId!==colId){
+  let historyDeferred=null;
+  if(prevColId!==colId && p.role){
     const destColR=state.columns.find(c=>c.id===colId);
-    if(p.role) resumeOrStartCalling(p, p.role, destColR?destColR.name:'');
+    const orgName=destColR?destColR.name:'';
+    if(willMarkPending){
+      // Live tenure display updates now; the permanent history record waits
+      // for commit.
+      updatePendingLiveDates(p, p.role, orgName);
+      historyDeferred={role:p.role, orgName, effectiveDate:new Date().toISOString().slice(0,7)};
+    } else {
+      resumeOrStartCalling(p, p.role, orgName);
+    }
   }
 
   if(beforePid){
@@ -3096,8 +3155,8 @@ function dropReorder(colId, sgId, beforePid){
     state.people.forEach((x,i)=>{ if(x.colId===colId&&x.subgroupId===sgId) lastIdx=i; });
     state.people.splice(lastIdx+1,0,p);
   }
-  if(!sameCol && !p.vacant){
-    markPending({personId:p.id, prevColId, prevSubgroupId:pcPrevSubgroupId, prevRole:pcPrevRole, createdVacancyId, replacedVacancy:null, prevNextSiblingId:pcPrevNextSiblingId});
+  if(willMarkPending){
+    markPending({personId:p.id, prevColId, prevSubgroupId:pcPrevSubgroupId, prevRole:pcPrevRole, prevStartDate:pcPrevStartDate, prevEndDate:pcPrevEndDate, createdVacancyId, replacedVacancy:null, prevNextSiblingId:pcPrevNextSiblingId, historyDeferred});
   }
   dragId=null;
   rebuildAll();
@@ -3140,25 +3199,27 @@ function dropToTray(trayGroupId){
   const p=state.people.find(x=>x.id===dragId);
   if(!p){ dragId=null; return; }
   const pcPrevColId=p.colId, pcPrevSubgroupId=p.subgroupId, pcPrevRole=p.role;
+  const pcPrevStartDate=p.startDate, pcPrevEndDate=p.endDate;
   let pcCreatedVacancyId=null;
+  let pcHistoryDeferred=null;
 
   if(p.colId!==TRAY && !p.vacant){
     const col=state.columns.find(c=>c.id===p.colId);
     const now=new Date().toISOString().slice(0,7);
 
-    // Record history before removing from this calling
     if(p.role){
-      if(!p.history) p.history=[];
-      p.history.forEach(h=>{ if(h.current){ h.current=false; if(!h.endDate) h.endDate=now; h.years=calcTenure(p).toFixed(1); } });
-      const alreadyRecorded=p.history.some(h=>h.calling===p.role&&(h.org||'')===(col?col.name:'')&&!h.current&&h.endDate===now);
-      if(!alreadyRecorded){
-        p.history.unshift({calling:p.role, org:col?col.name:'', years:calcTenure(p).toFixed(1), current:false, startDate:p.startDate||null, endDate:now});
-      }
-
       // Check if this person has OTHER callings (multi-calling)
       const otherCallings=state.people.filter(x=>x.id!==p.id&&!x.vacant&&x.colId!==TRAY&&x.name===p.name);
       if(otherCallings.length>0){
-        // They still have callings elsewhere — just leave a VACANT here, don't add to tray
+        // They still have callings elsewhere — just leave a VACANT here, don't
+        // add to tray. Not part of the pending workflow (the record itself
+        // gets deleted below), so history updates immediately as before.
+        if(!p.history) p.history=[];
+        p.history.forEach(h=>{ if(h.current){ h.current=false; if(!h.endDate) h.endDate=now; h.years=calcTenure(p).toFixed(1); } });
+        const alreadyRecorded=p.history.some(h=>h.calling===p.role&&(h.org||'')===(col?col.name:'')&&!h.current&&h.endDate===now);
+        if(!alreadyRecorded){
+          p.history.unshift({calling:p.role, org:col?col.name:'', years:calcTenure(p).toFixed(1), current:false, startDate:p.startDate||null, endDate:now});
+        }
         const peers=state.people.filter(x=>x.colId===p.colId);
         const srcPeer=peers[dragSrcIdx]||null;
         const ins=srcPeer?state.people.indexOf(srcPeer):state.people.length;
@@ -3170,7 +3231,9 @@ function dropToTray(trayGroupId){
         rebuildAll(); scheduleSave(); return;
       }
 
-      // Single calling — leave VACANT, move person to tray
+      // Single calling — leave VACANT, move person to tray. History record
+      // is deferred until this move is committed.
+      pcHistoryDeferred={role:p.role, orgName:col?col.name:'', startDate:p.startDate, effectiveDate:now};
       const peers=state.people.filter(x=>x.colId===p.colId);
       const srcPeer=peers[dragSrcIdx]||null;
       const ins=srcPeer?state.people.indexOf(srcPeer):state.people.length;
@@ -3188,7 +3251,7 @@ function dropToTray(trayGroupId){
     p.trayGroupId=trayGroupId||null;
   }
   if(pcPrevColId!==TRAY && !p.vacant){
-    markPending({personId:p.id, prevColId:pcPrevColId, prevSubgroupId:pcPrevSubgroupId, prevRole:pcPrevRole, createdVacancyId:pcCreatedVacancyId, replacedVacancy:null});
+    markPending({personId:p.id, prevColId:pcPrevColId, prevSubgroupId:pcPrevSubgroupId, prevRole:pcPrevRole, prevStartDate:pcPrevStartDate, prevEndDate:pcPrevEndDate, createdVacancyId:pcCreatedVacancyId, replacedVacancy:null, historyDeferred:pcHistoryDeferred, isExit:true});
   }
   dragId=null;
   rebuildAll();
@@ -4831,10 +4894,24 @@ function markPending(entry){
 }
 function isPersonPending(personId){ return pendingChanges.some(pc=>pc.personId===personId); }
 
+// Apply the permanent calling-history update a pending move deferred — called
+// only once a change is actually committed, using the dates captured back
+// when the move was made (not "now").
+function applyDeferredHistory(p, entry){
+  if(!entry.historyDeferred) return;
+  const hd=entry.historyDeferred;
+  if(entry.isExit) closeHistoryEntry(p, hd.role, hd.orgName, hd.startDate, hd.effectiveDate);
+  else resumeOrStartCalling(p, hd.role, hd.orgName, hd.effectiveDate);
+}
+
 function commitPersonPending(personId){
+  const entries=pendingChanges.filter(pc=>pc.personId===personId); // chronological order
+  const p=state.people.find(x=>x.id===personId);
+  if(p) entries.forEach(entry=>applyDeferredHistory(p, entry));
   pendingChanges=pendingChanges.filter(pc=>pc.personId!==personId);
   savePendingChanges();
   buildLayout(); renderTray(); updateCommitBadge();
+  scheduleSave();
 }
 
 function revertPendingForPerson(personId){
@@ -4854,6 +4931,7 @@ function revertPendingForPerson(personId){
     }
     if(p){
       p.colId=entry.prevColId; p.subgroupId=entry.prevSubgroupId; p.role=entry.prevRole;
+      p.startDate=entry.prevStartDate; p.endDate=entry.prevEndDate;
       if(entry.prevColId!==TRAY) p.trayGroupId=null;
       // Move p back to where they originally sat in the list, not wherever
       // they happen to be now, so their old org's ordering isn't disturbed.
@@ -4861,6 +4939,8 @@ function revertPendingForPerson(personId){
       if(curIdx>=0) state.people.splice(curIdx,1);
       const sibIdx2=entry.prevNextSiblingId?state.people.findIndex(x=>x.id===entry.prevNextSiblingId):-1;
       if(sibIdx2>=0) state.people.splice(sibIdx2,0,p); else state.people.push(p);
+      // p.history was never touched for a pending move (that's the point —
+      // it's deferred until commit), so there's nothing to undo there.
     }
   });
   pendingChanges=pendingChanges.filter(pc=>pc.personId!==personId);
@@ -4904,9 +4984,16 @@ function openCommitDialog(){
   document.body.appendChild(ov); modalEl=ov;
 }
 function commitAllPending(){
+  const ids=[...new Set(pendingChanges.map(pc=>pc.personId))];
+  ids.forEach(id=>{
+    const entries=pendingChanges.filter(pc=>pc.personId===id); // chronological order
+    const p=state.people.find(x=>x.id===id);
+    if(p) entries.forEach(entry=>applyDeferredHistory(p, entry));
+  });
   pendingChanges=[];
   savePendingChanges();
   closeModal(); buildLayout(); renderTray(); updateCommitBadge();
+  scheduleSave();
 }
 function discardAllPending(){
   const ids=[...new Set(pendingChanges.map(pc=>pc.personId))];
