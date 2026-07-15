@@ -1521,6 +1521,7 @@ const state = {
   ],
   categories: [...Object.keys(DEFAULT_CATEGORIES)], // dynamic list
   trayGroups: [], // [{id, name}] — user-defined tray groups
+  pendingChanges: [], // [{cid, personId, who, ...}] — uncommitted drag moves, synced so any device sees them
 };
 // assign colIds and infer gender and ageGroup from org
 const YOUTH_ORGS = ['Young Men', 'Young Women', 'Primary'];
@@ -4864,9 +4865,8 @@ function undo(){
   state.columns=prev.columns; state.people=prev.people; state.categories=prev.categories||state.categories; state.trayGroups=prev.trayGroups||state.trayGroups||[];
   // Drop any pending-change markers tied to the action just undone — they'd
   // otherwise reference a move that no longer happened.
-  if(pendingChanges.some(pc=>pc.snapAtLen===lenBeforePop)){
-    pendingChanges=pendingChanges.filter(pc=>pc.snapAtLen!==lenBeforePop);
-    savePendingChanges();
+  if(state.pendingChanges.some(pc=>pc.snapAtLen===lenBeforePop)){
+    state.pendingChanges=state.pendingChanges.filter(pc=>pc.snapAtLen!==lenBeforePop);
   }
   rebuildAll(); renderFilterPanel();
   const btn=document.getElementById('undo-btn');
@@ -4876,23 +4876,39 @@ document.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.key==='z')
 
 // ── COMMIT CHANGE (pending-review workflow) ────────────────────────────────────
 // Drag-and-drop moves are marked "pending" (orange outline + per-tile ✓/×) as a
-// personal review checklist — the underlying data already saves/syncs live, same
-// as before. This is local to this browser only, not synced to other devices.
-let pendingChanges=[];
-(function loadPendingChanges(){
-  try{ pendingChanges=JSON.parse(localStorage.getItem('ward-pending-changes')||'[]'); }
-  catch(e){ pendingChanges=[]; }
-})();
-function savePendingChanges(){ localStorage.setItem('ward-pending-changes', JSON.stringify(pendingChanges)); }
+// review checklist. Pending state syncs through the cloud alongside everything
+// else, so anyone opening the app on any device sees the same unconfirmed
+// moves — this app is mostly used by different people on different devices at
+// different times, not simultaneously, so a shared queue matters more here
+// than tight concurrent-edit handling.
+if(!state.pendingChanges) state.pendingChanges=[];
+
+// Per-device editor name — this app has one shared password, not per-user
+// accounts, so we ask each browser once who's editing and remember it
+// locally, purely to label who made a pending change.
+function getEditorName(){
+  let n=localStorage.getItem('ward-editor-name');
+  if(!n){
+    n=(prompt('Your name (shown next to any pending changes you make):')||'').trim()||'Unknown';
+    localStorage.setItem('ward-editor-name', n);
+  }
+  return n;
+}
+function setEditorName(){
+  const cur=localStorage.getItem('ward-editor-name')||'';
+  const n=(prompt('Your name (shown next to any pending changes you make):', cur)||'').trim();
+  if(n) localStorage.setItem('ward-editor-name', n);
+}
 
 function markPending(entry){
   entry.cid='pc'+Date.now()+Math.random().toString(36).slice(2,7);
   entry.snapAtLen=undoStack.length;
-  pendingChanges.push(entry);
-  savePendingChanges();
+  entry.who=getEditorName();
+  entry.madeAt=new Date().toISOString();
+  state.pendingChanges.push(entry);
   updateCommitBadge();
 }
-function isPersonPending(personId){ return pendingChanges.some(pc=>pc.personId===personId); }
+function isPersonPending(personId){ return state.pendingChanges.some(pc=>pc.personId===personId); }
 
 // Apply the permanent calling-history update a pending move deferred — called
 // only once a change is actually committed, using the dates captured back
@@ -4905,17 +4921,16 @@ function applyDeferredHistory(p, entry){
 }
 
 function commitPersonPending(personId){
-  const entries=pendingChanges.filter(pc=>pc.personId===personId); // chronological order
+  const entries=state.pendingChanges.filter(pc=>pc.personId===personId); // chronological order
   const p=state.people.find(x=>x.id===personId);
   if(p) entries.forEach(entry=>applyDeferredHistory(p, entry));
-  pendingChanges=pendingChanges.filter(pc=>pc.personId!==personId);
-  savePendingChanges();
+  state.pendingChanges=state.pendingChanges.filter(pc=>pc.personId!==personId);
   buildLayout(); renderTray(); updateCommitBadge();
   scheduleSave();
 }
 
 function revertPendingForPerson(personId){
-  const entries=pendingChanges.filter(pc=>pc.personId===personId).reverse(); // most recent first
+  const entries=state.pendingChanges.filter(pc=>pc.personId===personId).reverse(); // most recent first
   const p=state.people.find(x=>x.id===personId);
   entries.forEach(entry=>{
     if(entry.createdVacancyId){
@@ -4943,15 +4958,14 @@ function revertPendingForPerson(personId){
       // it's deferred until commit), so there's nothing to undo there.
     }
   });
-  pendingChanges=pendingChanges.filter(pc=>pc.personId!==personId);
-  savePendingChanges();
+  state.pendingChanges=state.pendingChanges.filter(pc=>pc.personId!==personId);
   rebuildAll();
   updateCommitBadge();
 }
 
 function updateCommitBadge(){
   const btn=document.getElementById('commit-btn');
-  const n=new Set(pendingChanges.map(pc=>pc.personId)).size;
+  const n=new Set(state.pendingChanges.map(pc=>pc.personId)).size;
   if(btn){
     btn.querySelector('#commit-count').textContent = n ? ` (${n})` : '';
     btn.classList.toggle('has-pending', n>0);
@@ -4960,13 +4974,17 @@ function updateCommitBadge(){
   if(banner){
     banner.style.display = n ? 'flex' : 'none';
     const text=document.getElementById('pending-banner-text');
-    if(text) text.textContent = `⚠ ${n} uncommitted change${n===1?'':'s'} — already live, but still marked for review on this device.`;
+    if(text){
+      const whos=[...new Set(state.pendingChanges.map(pc=>pc.who).filter(Boolean))];
+      const byWho = whos.length ? ` by ${whos.join(', ')}` : '';
+      text.textContent = `⚠ ${n} uncommitted change${n===1?'':'s'}${byWho} — visible to everyone, waiting for review.`;
+    }
   }
 }
 
 function openCommitDialog(){
   closeModal();
-  const n=new Set(pendingChanges.map(pc=>pc.personId)).size;
+  const n=new Set(state.pendingChanges.map(pc=>pc.personId)).size;
   const ov=document.createElement('div');
   ov.className='modal-overlay';
   ov.onclick=e=>{ if(e.target===ov) closeModal(); };
@@ -4984,33 +5002,30 @@ function openCommitDialog(){
   document.body.appendChild(ov); modalEl=ov;
 }
 function commitAllPending(){
-  const ids=[...new Set(pendingChanges.map(pc=>pc.personId))];
+  const ids=[...new Set(state.pendingChanges.map(pc=>pc.personId))];
   ids.forEach(id=>{
-    const entries=pendingChanges.filter(pc=>pc.personId===id); // chronological order
+    const entries=state.pendingChanges.filter(pc=>pc.personId===id); // chronological order
     const p=state.people.find(x=>x.id===id);
     if(p) entries.forEach(entry=>applyDeferredHistory(p, entry));
   });
-  pendingChanges=[];
-  savePendingChanges();
+  state.pendingChanges=[];
   closeModal(); buildLayout(); renderTray(); updateCommitBadge();
   scheduleSave();
 }
 function discardAllPending(){
-  const ids=[...new Set(pendingChanges.map(pc=>pc.personId))];
+  const ids=[...new Set(state.pendingChanges.map(pc=>pc.personId))];
   ids.forEach(id=>revertPendingForPerson(id));
   closeModal();
 }
 function discardAllPendingWithConfirm(){
-  const n=new Set(pendingChanges.map(pc=>pc.personId)).size;
+  const n=new Set(state.pendingChanges.map(pc=>pc.personId)).size;
   if(!n) return;
   if(confirm(`Discard ${n} pending change${n===1?'':'s'}? Each one will be reverted back to how it was before.`)) discardAllPending();
 }
 
-// Warn before leaving the tab with uncommitted changes — the data itself is
-// already saved, but the pending markers (and the review they're flagging)
-// are local to this browser and would otherwise just be left behind.
+// Warn before leaving the tab with uncommitted changes.
 window.addEventListener('beforeunload', e=>{
-  if(pendingChanges.length){
+  if(state.pendingChanges.length){
     e.preventDefault();
     e.returnValue='';
   }
@@ -5031,6 +5046,7 @@ function statePayload(){
     categories: state.categories,
     trayGroups: state.trayGroups||[],
     potentialCallings: state.potentialCallings||[],
+    pendingChanges: state.pendingChanges||[],
     uid,
     savedAt: Date.now(),
   };
@@ -5227,10 +5243,12 @@ function applyLoadedState(data){
   if(data.categories&&data.categories.length) state.categories=data.categories;
   if(data.trayGroups) state.trayGroups=data.trayGroups;
   if(data.potentialCallings) state.potentialCallings=data.potentialCallings;
+  state.pendingChanges=data.pendingChanges||[];
   state._savedAt=data.savedAt||0;  // track timestamp for cloud freshness comparison
   uid=data.uid||uid;
   lastSavedHash=hashState(statePayload());
   migrateAllOrgs();
+  updateCommitBadge();
 }
 
 // ── SYNC STATUS BUTTON ────────────────────────────────────────────────────────
