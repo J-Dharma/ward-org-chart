@@ -4488,7 +4488,7 @@ function openPersonCard(pid, showLinked){
 
   // Notes
   const notesRow=document.createElement('div'); notesRow.className='pc-row'; notesRow.style.alignItems='flex-start';
-  notesRow.innerHTML=`<div class="pc-label" style="padding-top:4px">Notes</div><textarea class="pc-input" id="pc-notes" rows="2" placeholder="Any notes…" style="resize:vertical">${p.notes||''}</textarea>`;
+  notesRow.innerHTML=`<div class="pc-label" style="padding-top:4px">Notes</div><textarea class="pc-input" id="pc-notes" rows="5" placeholder="Any notes…" style="resize:vertical;line-height:1.5;min-height:90px;">${p.notes||''}</textarea>`;
   detSec.appendChild(notesRow);
   body.appendChild(detSec);
   // Ensure current calling history entry exists for this card's calling
