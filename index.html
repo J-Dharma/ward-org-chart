@@ -423,6 +423,11 @@ body.hide-tenure .row-multi { margin-left: auto; }
   font-weight: 700; padding: 3px 7px; border-radius: 4px;
   font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; flex-shrink: 0;
 }
+.band-pending-badge {
+  background: rgba(255,149,0,0.14); color: #b06400;
+  font-weight: 700; padding: 3px 7px; border-radius: 4px;
+  font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; flex-shrink: 0;
+}
 .band-settings {
   font-size: 12px; color: var(--ink-3); cursor: pointer; padding: 2px 5px;
   border-radius: 4px; flex-shrink: 0; opacity: 0.5; margin-left: auto;
@@ -2394,6 +2399,7 @@ function buildLayout(){
     const filled = allPeople.filter(p=>!p.vacant).length;
     const vacs = allPeople.filter(p=>p.vacant).length;
     const pct = total>0 ? Math.round(filled/total*100) : 0;
+    const pendingHere = new Set(allPeople.filter(p=>isPersonPending(p.id)).map(p=>p.id)).size;
 
     const band = document.createElement('div');
     band.className = 'band' + (col.collapsed?' collapsed':'');
@@ -2466,6 +2472,14 @@ function buildLayout(){
       vbadge.className = 'band-vac-badge';
       vbadge.textContent = `${vacs} vacant`;
       head.appendChild(vbadge);
+    }
+
+    if(pendingHere>0){
+      const pbadge = document.createElement('div');
+      pbadge.className = 'band-pending-badge';
+      pbadge.textContent = `${pendingHere} pending`;
+      pbadge.title = 'Uncommitted change'+(pendingHere===1?'':'s')+' in this org';
+      head.appendChild(pbadge);
     }
 
     // Gear icon → col settings
